@@ -1,1 +1,1 @@
-# parallel-meeting-suppor
+# parallel-meeting-support
