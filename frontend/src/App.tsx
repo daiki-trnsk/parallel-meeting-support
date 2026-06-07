@@ -1,23 +1,16 @@
-import '@livekit/components-styles';
-import {
-  LiveKitRoom,
-  VideoConference,
-} from '@livekit/components-react';
+import React, { type JSX } from 'react';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import Home from './pages/Home';
+import Meeting from './pages/Meeting';
 
-const serverUrl = 'wss://parallel-meeting-support-a7odp0w6.livekit.cloud';
-const token = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3ODA2NTU4NTgsImlkZW50aXR5IjoiZGFpa2kyIiwiaXNzIjoiQVBJZERoeU02UjY2VEJmIiwibmFtZSI6ImRhaWtpMiIsIm5iZiI6MTc4MDY1NTU1OCwic3ViIjoiZGFpa2kyIiwidmlkZW8iOnsicm9vbSI6InRlc3Qtcm9vbSIsInJvb21Kb2luIjp0cnVlfX0.lpYsZlGAWg_bl5YsrLokdlYbQ7nLQ9YjqL4qXNn5l9k';
-
-function App() {
+function App(): JSX.Element {
   return (
-    <LiveKitRoom
-      serverUrl={serverUrl}
-      token={token}
-      connect={true}
-      video={true}
-      audio={true}
-    >
-      <VideoConference />
-    </LiveKitRoom>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/meeting" element={<Meeting />} />
+      </Routes>
+    </BrowserRouter>
   );
 }
 
