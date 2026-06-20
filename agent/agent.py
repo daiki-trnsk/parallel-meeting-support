@@ -53,14 +53,61 @@ async def entrypoint(ctx: agents.JobContext):
 
     print("Agent connected to room")
 
-    # Log existing participants if available
+    # DEBUG: 状態確認用（entrypoint 内）
+    try:
+        print("DEBUG ctx type:", type(ctx))
+        print("DEBUG ctx dir:", [a for a in dir(ctx) if not a.startswith("_")])
+        room = getattr(ctx, "room", None)
+        print("DEBUG room repr:", repr(room))
+        if room is not None:
+            print("DEBUG room type:", type(room))
+            print("DEBUG room dir filtered:", [n for n in dir(room) if "participant" in n.lower()])
+        participants = getattr(room, "participants", None) if room is not None else None
+        if participants is None:
+            participants = getattr(ctx, "participants", None)
+        print("DEBUG participants raw repr:", repr(participants))
+        try:
+            if participants is None:
+                print("DEBUG: participants is None")
+            elif hasattr(participants, "keys"):
+                # mapping-like
+                try:
+                    print("DEBUG participants keys:", list(participants.keys()))
+                except Exception as e:
+                    print("DEBUG error listing participant keys:", e)
+            else:
+                # try a short preview (may exhaust iterator)
+                try:
+                    preview = list(participants)[:10]
+                    print("DEBUG participants preview:", preview)
+                except Exception as e:
+                    print("DEBUG error previewing participants:", e)
+        except Exception as e:
+            print("DEBUG error enumerating participants:", e)
+    except Exception as e:
+        print("DEBUG error inspecting ctx/room:", e)
+
+    # Log existing participants if available (extended for LiveKit Room)
     try:
         participants = None
-        # common locations for participants
-        if room is not None and hasattr(room, "participants"):
-            participants = getattr(room, "participants")
-        elif hasattr(ctx, "participants"):
+        # check common locations for participants on room
+        if room is not None:
+            if hasattr(room, "participants"):
+                participants = getattr(room, "participants")
+            elif hasattr(room, "remote_participants"):
+                participants = getattr(room, "remote_participants")
+            elif hasattr(room, "_remote_participants"):
+                participants = getattr(room, "_remote_participants")
+        # fallback to ctx.participants
+        if participants is None and hasattr(ctx, "participants"):
             participants = getattr(ctx, "participants")
+
+        # helpful debug: if still None, report participant count if available
+        if participants is None and room is not None and hasattr(room, "num_participants"):
+            try:
+                print(f"DEBUG: room.num_participants = {getattr(room, 'num_participants')}")
+            except Exception:
+                pass
 
         if participants is not None:
             # participants may be a dict-like or list-like
