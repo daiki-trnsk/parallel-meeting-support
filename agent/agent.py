@@ -1,8 +1,15 @@
-from dotenv import load_dotenv
-from livekit import agents
+from __future__ import annotations
+
+import asyncio
+import importlib
+import os
 from datetime import datetime
 from typing import Any
-import asyncio
+
+from dotenv import load_dotenv
+from livekit import agents, rtc
+
+deepgram = importlib.import_module("livekit.plugins.deepgram")
 
 load_dotenv()
 
@@ -12,7 +19,7 @@ def _fmt_ts(ts: datetime) -> str:
 
 
 def _extract_participant_fields(p: Any) -> dict:
-    # support both object-like and dict-like participant representations
+    # オブジェクト型と辞書型の両方の参加者表現をサポート
     if p is None:
         return {"identity": None, "name": None, "metadata": None}
 
@@ -42,10 +49,146 @@ def log_participant(room_name: str, participant: Any, joined_at: datetime | None
     print(f"joined_at: {_fmt_ts(joined_at)}")
 
 
+class DeepgramTranscriptPrinter:
+    def __init__(self, room: rtc.Room, stt_model: Any) -> None:
+        self._room = room
+        self._stt = stt_model
+        self._tasks: dict[str, asyncio.Task[None]] = {}
+        self._task_participants: dict[str, str] = {}
+        self._closed = False
+
+    def start(self) -> None:
+        self._room.on("track_subscribed", self._on_track_subscribed)
+        self._room.on("track_unsubscribed", self._on_track_unsubscribed)
+        self._room.on("participant_disconnected", self._on_participant_disconnected)
+
+        for participant in self._room.remote_participants.values():
+            self._start_existing_tracks(participant)
+
+    async def aclose(self) -> None:
+        if self._closed:
+            return
+
+        self._closed = True
+        self._room.off("track_subscribed", self._on_track_subscribed)
+        self._room.off("track_unsubscribed", self._on_track_unsubscribed)
+        self._room.off("participant_disconnected", self._on_participant_disconnected)
+
+        tasks = list(self._tasks.values())
+        self._tasks.clear()
+        self._task_participants.clear()
+        if tasks:
+            await agents.utils.aio.cancel_and_wait(*tasks)
+
+    def _start_existing_tracks(self, participant: rtc.RemoteParticipant) -> None:
+        for publication in participant.track_publications.values():
+            if publication.kind != rtc.TrackKind.KIND_AUDIO:
+                continue
+            if publication.track is None:
+                continue
+            self._start_transcription_task(participant.identity, publication)
+
+    def _on_track_subscribed(
+        self,
+        track: rtc.Track,
+        publication: rtc.TrackPublication,
+        participant: rtc.RemoteParticipant,
+    ) -> None:
+        if publication.kind != rtc.TrackKind.KIND_AUDIO:
+            return
+        self._start_transcription_task(participant.identity, publication)
+
+    def _on_track_unsubscribed(
+        self,
+        track: rtc.Track,
+        publication: rtc.TrackPublication,
+        participant: rtc.RemoteParticipant,
+    ) -> None:
+        self._cancel_transcription_task(publication.sid)
+
+    def _on_participant_disconnected(self, participant: rtc.RemoteParticipant) -> None:
+        for sid, identity in list(self._task_participants.items()):
+            if identity == participant.identity:
+                self._cancel_transcription_task(sid)
+
+    def _cancel_transcription_task(self, publication_sid: str) -> None:
+        task = self._tasks.pop(publication_sid, None)
+        self._task_participants.pop(publication_sid, None)
+        if task is not None:
+            task.cancel()
+
+    def _start_transcription_task(self, participant_identity: str, publication: rtc.TrackPublication) -> None:
+        if publication.sid in self._tasks:
+            return
+
+        if publication.track is None:
+            return
+
+        task = asyncio.create_task(
+            self._transcribe_publication(participant_identity, publication),
+            name=participant_identity,
+        )
+        self._tasks[publication.sid] = task
+        self._task_participants[publication.sid] = participant_identity
+
+        def _drop_task(_task: asyncio.Task[None]) -> None:
+            self._tasks.pop(publication.sid, None)
+            self._task_participants.pop(publication.sid, None)
+
+        task.add_done_callback(_drop_task)
+
+    async def _transcribe_publication(
+        self, participant_identity: str, publication: rtc.TrackPublication
+    ) -> None:
+        if publication.track is None:
+            return
+
+        audio_stream = rtc.AudioStream.from_track(track=publication.track)
+        try:
+            async with self._stt.stream(language="multi") as stt_stream:
+                async def _forward_audio() -> None:
+                    try:
+                        async for event in audio_stream:
+                            stt_stream.push_frame(event.frame)
+                    finally:
+                        stt_stream.end_input()
+
+                forward_task = asyncio.create_task(_forward_audio())
+                try:
+                    async for event in stt_stream:
+                        if event.type != agents.stt.SpeechEventType.FINAL_TRANSCRIPT:
+                            continue
+                        if not event.alternatives:
+                            continue
+
+                        text = event.alternatives[0].text.strip()
+                        if not text:
+                            continue
+
+                        print("[TRANSCRIPT]", flush=True)
+                        print(f"participant={participant_identity}", flush=True)
+                        print(f"text={text}", flush=True)
+                finally:
+                    await agents.utils.aio.cancel_and_wait(forward_task)
+        finally:
+            await audio_stream.aclose()
+
+
 async def entrypoint(ctx: agents.JobContext):
-    # connect to the room (keeps original behavior)
+    deepgram_api_key = os.environ.get("DEEPGRAM_API_KEY")
+    if not deepgram_api_key:
+        raise RuntimeError("DEEPGRAM_API_KEY is not set")
+
+    transcript_stt = deepgram.STT(
+        api_key=deepgram_api_key,
+        model="nova-3",
+        language="multi",
+        interim_results=False,
+    )
+
+    # ルームに接続（元の動作を維持）
     await ctx.connect()
-    # try to obtain room name from common attributes
+    # 一般的な属性からルーム名を取得する
     room_name = None
     room = getattr(ctx, "room", None)
     room_name = getattr(room, "name", None) if room is not None else getattr(ctx, "room_name", None)
@@ -53,44 +196,10 @@ async def entrypoint(ctx: agents.JobContext):
 
     print("Agent connected to room")
 
-    # DEBUG: 状態確認用（entrypoint 内）
-    try:
-        print("DEBUG ctx type:", type(ctx))
-        print("DEBUG ctx dir:", [a for a in dir(ctx) if not a.startswith("_")])
-        room = getattr(ctx, "room", None)
-        print("DEBUG room repr:", repr(room))
-        if room is not None:
-            print("DEBUG room type:", type(room))
-            print("DEBUG room dir filtered:", [n for n in dir(room) if "participant" in n.lower()])
-        participants = getattr(room, "participants", None) if room is not None else None
-        if participants is None:
-            participants = getattr(ctx, "participants", None)
-        print("DEBUG participants raw repr:", repr(participants))
-        try:
-            if participants is None:
-                print("DEBUG: participants is None")
-            elif hasattr(participants, "keys"):
-                # mapping-like
-                try:
-                    print("DEBUG participants keys:", list(participants.keys()))
-                except Exception as e:
-                    print("DEBUG error listing participant keys:", e)
-            else:
-                # try a short preview (may exhaust iterator)
-                try:
-                    preview = list(participants)[:10]
-                    print("DEBUG participants preview:", preview)
-                except Exception as e:
-                    print("DEBUG error previewing participants:", e)
-        except Exception as e:
-            print("DEBUG error enumerating participants:", e)
-    except Exception as e:
-        print("DEBUG error inspecting ctx/room:", e)
-
     # Log existing participants if available (extended for LiveKit Room)
     try:
         participants = None
-        # check common locations for participants on room
+        # ルームの参加者の一般的な位置をチェック
         if room is not None:
             if hasattr(room, "participants"):
                 participants = getattr(room, "participants")
@@ -98,11 +207,11 @@ async def entrypoint(ctx: agents.JobContext):
                 participants = getattr(room, "remote_participants")
             elif hasattr(room, "_remote_participants"):
                 participants = getattr(room, "_remote_participants")
-        # fallback to ctx.participants
+        # ctx.participantsにフォールバック
         if participants is None and hasattr(ctx, "participants"):
             participants = getattr(ctx, "participants")
 
-        # helpful debug: if still None, report participant count if available
+        # デバッグ用：参加者数が利用可能な場合はレポート
         if participants is None and room is not None and hasattr(room, "num_participants"):
             try:
                 print(f"DEBUG: room.num_participants = {getattr(room, 'num_participants')}")
@@ -110,49 +219,26 @@ async def entrypoint(ctx: agents.JobContext):
                 pass
 
         if participants is not None:
-            # participants may be a dict-like or list-like
+            # 参加者は辞書型またはリスト型の可能性あり
             items = participants.values() if hasattr(participants, "values") else participants
             for p in items:
                 log_participant(room_name, p, datetime.now())
     except Exception as e:
         print(f"Warning: failed to enumerate existing participants: {e}")
 
-    # Register handler for new participants where possible
-    async def _on_participant_joined(p):
-        try:
-            log_participant(room_name, p, datetime.now())
-        except Exception as e:
-            print(f"Error logging participant: {e}")
+    printer = DeepgramTranscriptPrinter(room, transcript_stt)
+    printer.start()
 
-    # Synchronous wrapper required by some SDKs' `.on()` API. It schedules the async handler.
-    def _on_participant_joined_sync(p):
-        try:
-            asyncio.create_task(_on_participant_joined(p))
-        except Exception as e:
-            print(f"Error scheduling participant handler: {e}")
+    def _on_participant_connected(participant: rtc.RemoteParticipant) -> None:
+        log_participant(room_name, participant, datetime.now())
 
-    # Try several common event registration patterns
-    try:
-        if room is not None and hasattr(room, "on"):
-            # room.on("participant_connected"/"participant_joined") expects a sync callback
-            try:
-                room.on("participant_connected", _on_participant_joined_sync)
-            except Exception:
-                room.on("participant_joined", _on_participant_joined_sync)
-        elif hasattr(ctx, "on"):
-            try:
-                ctx.on("participant_connected", _on_participant_joined_sync)
-            except Exception:
-                ctx.on("participant_joined", _on_participant_joined_sync)
-        elif hasattr(ctx, "on_participant_joined"):
-            # some SDKs expose a dedicated decorator-like API; wrap similarly
-            try:
-                ctx.on_participant_joined(_on_participant_joined_sync)
-            except Exception:
-                # fallback: schedule directly in case it expects sync
-                ctx.on_participant_joined(lambda p: asyncio.create_task(_on_participant_joined(p)))
-    except Exception as e:
-        print(f"Warning: failed to register participant-joined handler: {e}")
+    room.on("participant_connected", _on_participant_connected)
+
+    async def _cleanup() -> None:
+        room.off("participant_connected", _on_participant_connected)
+        await printer.aclose()
+
+    ctx.add_shutdown_callback(_cleanup)
 
 
 if __name__ == "__main__":
