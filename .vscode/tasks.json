@@ -1,0 +1,62 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "frontend dev",
+            "type": "shell",
+            "command": "cd frontend && npm run dev",
+            "isBackground": true,
+            "problemMatcher": [],
+            "presentation": {
+                "panel": "new",
+                "group": "pms",
+                "clear": true
+            }
+        },
+        {
+            "label": "agent dev",
+            "type": "shell",
+            "command": "cd agent && .venv\\Scripts\\activate.bat && python agent.py dev",
+            "isBackground": true,
+            "problemMatcher": [],
+            "presentation": {
+                "panel": "new",
+                "group": "pms",
+                "clear": true
+            }
+        },
+        {
+            "label": "dispatch agent",
+            "type": "shell",
+            "command": "cd agent && python agent_dispatch.py",
+            "problemMatcher": [],
+            "presentation": {
+                "panel": "new",
+                "group": "pms",
+                "clear": true
+            }
+        },
+        {
+            "label": "health check",
+            "type": "shell",
+            "command": "curl https://pms-token-server.onrender.com/health",
+            "problemMatcher": [],
+            "presentation": {
+                "panel": "new",
+                "group": "pms",
+                "clear": true
+            }
+        },
+        {
+            "label": "start all pms",
+            "dependsOn": [
+                "frontend dev",
+                "agent dev",
+                "dispatch agent",
+                "health check"
+            ],
+            "dependsOrder": "parallel",
+            "problemMatcher": []
+        }
+    ]
+}
