@@ -13,6 +13,9 @@ deepgram = importlib.import_module("livekit.plugins.deepgram")
 
 load_dotenv()
 
+AGENT_ROOM = os.environ.get("PMS_AGENT_ROOM", "room-a")
+AGENT_IDENTITY = os.environ.get("PMS_AGENT_IDENTITY", "pms-agent-room-a")
+
 
 def _fmt_ts(ts: datetime) -> str:
     return ts.strftime("%Y-%m-%d %H:%M:%S")
@@ -166,6 +169,7 @@ class DeepgramTranscriptPrinter:
                             continue
 
                         print("[TRANSCRIPT]", flush=True)
+                        print(f"room={self._room.name}", flush=True)
                         print(f"participant={participant_identity}", flush=True)
                         print(f"text={text}", flush=True)
                 finally:
@@ -245,6 +249,6 @@ if __name__ == "__main__":
     agents.cli.run_app(
         agents.WorkerOptions(
             entrypoint_fnc=entrypoint,
-            agent_name="pms-agent",
-            )
+            agent_name=AGENT_IDENTITY,
+        )
     )

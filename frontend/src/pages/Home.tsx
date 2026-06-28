@@ -1,15 +1,19 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-type Role = { name: string; identity: string };
+type Role = { name: string; identity: string; rooms: string[] };
 
 const ROLES: Role[] = [
-  { name: '同時参加者', identity: 'subject-01' },
-  { name: 'サクラA', identity: 'sakura-a' },
-  { name: 'サクラB', identity: 'sakura-b' },
-  { name: 'サクラC', identity: 'sakura-c' },
-  { name: 'サクラD', identity: 'sakura-d' },
+  { name: '参加者A (room-a)', identity: 'participant-a', rooms: ['room-a'] },
+  { name: '参加者B (room-a)', identity: 'participant-b', rooms: ['room-a'] },
+  { name: '参加者C (room-b)', identity: 'participant-c', rooms: ['room-b'] },
+  { name: '参加者D (room-b)', identity: 'participant-d', rooms: ['room-b'] },
+  { name: '同時参加者 (subject-01)', identity: 'subject-01', rooms: ['room-a', 'room-b'] },
 ];
+
+type RoomSession = { token: string; url: string; room: string; identity: string; name?: string };
+
+const TOKEN_API = 'https://pms-token-server.onrender.com/token';
 
 const Home: React.FC = () => {
   const navigate = useNavigate();
@@ -20,15 +24,19 @@ const Home: React.FC = () => {
     setError(null);
     setLoading(role.identity);
     try {
-      const res = await fetch('https://pms-token-server.onrender.com/token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identity: role.identity }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      // save to sessionStorage
-      sessionStorage.setItem('livekit_session', JSON.stringify(data));
+      const sessions: RoomSession[] = await Promise.all(
+        role.rooms.map(async (room) => {
+          const res = await fetch(TOKEN_API, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ identity: role.identity, room }),
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status} (${room})`);
+          const data = await res.json();
+          return { ...data, room } as RoomSession;
+        }),
+      );
+      sessionStorage.setItem('livekit_session', JSON.stringify(sessions));
       navigate('/meeting');
     } catch (e: any) {
       setError(e?.message ?? 'トークン取得に失敗しました');
@@ -70,7 +78,7 @@ const buttonColumnStyle: React.CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   gap: 12,
-  width: 240,
+  width: 260,
 };
 
 const buttonStyle: React.CSSProperties = {
