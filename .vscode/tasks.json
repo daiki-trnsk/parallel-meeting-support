@@ -2,60 +2,133 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "frontend dev",
+            "label": "T1: Frontend",
             "type": "shell",
             "command": "cd frontend && npm run dev",
-            "isBackground": true,
-            "problemMatcher": [],
+            "options": {
+                "shell": {
+                    "executable": "cmd.exe",
+                    "args": [
+                        "/d",
+                        "/c"
+                    ]
+                }
+            },
             "presentation": {
-                "panel": "new",
-                "group": "pms",
-                "clear": true
-            }
+                "label": "T1: Frontend",
+                "panel": "dedicated",
+                "reveal": "always",
+                "clear": true,
+                "showReuseMessage": false
+            },
+            "isBackground": true,
+            "problemMatcher": []
         },
         {
-            "label": "agent dev",
+            "label": "T2A: Agent Room A",
             "type": "shell",
-            "command": "cd agent && .venv\\Scripts\\activate.bat && python agent.py dev",
-            "isBackground": true,
-            "problemMatcher": [],
+            "command": "cd agent && .venv\\Scripts\\activate && set PMS_AGENT_IDENTITY=pms-agent-room-a&& python agent.py dev",
+            "options": {
+                "shell": {
+                    "executable": "cmd.exe",
+                    "args": [
+                        "/d",
+                        "/c"
+                    ]
+                }
+            },
             "presentation": {
-                "panel": "new",
-                "group": "pms",
-                "clear": true
-            }
+                "label": "T2A: Agent Room A",
+                "panel": "dedicated",
+                "reveal": "always",
+                "clear": true,
+                "showReuseMessage": false
+            },
+            "isBackground": true,
+            "problemMatcher": []
         },
         {
-            "label": "dispatch agent",
+            "label": "T2B: Agent Room B",
+            "type": "shell",
+            "command": "cd agent && .venv\\Scripts\\activate && set PMS_AGENT_IDENTITY=pms-agent-room-b&& python agent.py dev",
+            "options": {
+                "shell": {
+                    "executable": "cmd.exe",
+                    "args": [
+                        "/d",
+                        "/c"
+                    ]
+                }
+            },
+            "presentation": {
+                "label": "T2B: Agent Room B",
+                "panel": "dedicated",
+                "reveal": "always",
+                "clear": true,
+                "showReuseMessage": false
+            },
+            "isBackground": true,
+            "problemMatcher": []
+        },
+        {
+            "label": "T3: Dispatch",
             "type": "shell",
             "command": "cd agent && python agent_dispatch.py",
-            "problemMatcher": [],
+            "options": {
+                "shell": {
+                    "executable": "cmd.exe",
+                    "args": [
+                        "/d",
+                        "/c"
+                    ]
+                }
+            },
             "presentation": {
-                "panel": "new",
-                "group": "pms",
-                "clear": true
-            }
+                "label": "T3: Dispatch",
+                "panel": "dedicated",
+                "reveal": "always",
+                "clear": true,
+                "showReuseMessage": false
+            },
+            "isBackground": true,
+            "problemMatcher": []
         },
         {
-            "label": "health check",
+            "label": "T4: Health Check",
             "type": "shell",
-            "command": "curl https://pms-token-server.onrender.com/health",
-            "problemMatcher": [],
+            "command": "curl -s https://pms-token-server.onrender.com/health",
+            "options": {
+                "shell": {
+                    "executable": "cmd.exe",
+                    "args": [
+                        "/d",
+                        "/c"
+                    ]
+                }
+            },
             "presentation": {
-                "panel": "new",
-                "group": "pms",
-                "clear": true
-            }
+                "label": "T4: Health Check",
+                "panel": "dedicated",
+                "reveal": "always",
+                "clear": true,
+                "showReuseMessage": false
+            },
+            "isBackground": false,
+            "problemMatcher": []
         },
         {
-            "label": "start all pms",
+            "label": "Dev: Start All",
             "dependsOn": [
-                "frontend dev",
-                "agent dev",
-                "dispatch agent",
-                "health check"
+                "T1: Frontend",
+                "T2A: Agent Room A",
+                "T2B: Agent Room B",
+                "T4: Health Check"
             ],
             "dependsOrder": "parallel",
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
             "problemMatcher": []
         }
     ]
