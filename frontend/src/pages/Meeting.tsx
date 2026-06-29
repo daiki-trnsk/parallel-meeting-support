@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import '@livekit/components-styles';
 import { LiveKitRoom, VideoConference } from '@livekit/components-react';
+import TranscriptPanel from '../components/TranscriptPanel';
 
 type RoomSession = { token: string; url: string; room: string; identity: string; name?: string };
 
@@ -66,9 +67,25 @@ const Meeting: React.FC = () => {
               </div>
             )}
             <div style={{ flex: 1, overflow: 'hidden' }}>
-              <LiveKitRoom serverUrl={s.url} token={s.token} connect={true} video audio>
-                <VideoConference />
-              </LiveKitRoom>
+              {sessions.length > 1 ? (
+                <LiveKitRoom
+                  serverUrl={s.url}
+                  token={s.token}
+                  connect={true}
+                  video
+                  audio
+                  style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
+                >
+                  <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+                    <VideoConference />
+                  </div>
+                  <TranscriptPanel roomLabel={s.room} />
+                </LiveKitRoom>
+              ) : (
+                <LiveKitRoom serverUrl={s.url} token={s.token} connect={true} video audio>
+                  <VideoConference />
+                </LiveKitRoom>
+              )}
             </div>
           </div>
         ))}

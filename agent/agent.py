@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import importlib
+import json
 import os
 from datetime import datetime
 from typing import Any
@@ -172,6 +173,19 @@ class DeepgramTranscriptPrinter:
                         print(f"room={self._room.name}", flush=True)
                         print(f"participant={participant_identity}", flush=True)
                         print(f"text={text}", flush=True)
+
+                        payload = json.dumps({
+                            "room": self._room.name,
+                            "participant": participant_identity,
+                            "text": text,
+                        }).encode("utf-8")
+                        asyncio.create_task(
+                            self._room.local_participant.publish_data(
+                                payload,
+                                topic="transcript",
+                                reliable=True,
+                            )
+                        )
                 finally:
                     await agents.utils.aio.cancel_and_wait(forward_task)
         finally:
