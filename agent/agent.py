@@ -149,7 +149,7 @@ class DeepgramTranscriptPrinter:
 
         audio_stream = rtc.AudioStream.from_track(track=publication.track)
         try:
-            async with self._stt.stream(language="multi") as stt_stream:
+            async with self._stt.stream(language="ja") as stt_stream:
                 async def _forward_audio() -> None:
                     try:
                         async for event in audio_stream:
@@ -200,7 +200,7 @@ async def entrypoint(ctx: agents.JobContext):
     transcript_stt = deepgram.STT(
         api_key=deepgram_api_key,
         model="nova-3",
-        language="multi",
+        language="ja",
         interim_results=False,
     )
 
