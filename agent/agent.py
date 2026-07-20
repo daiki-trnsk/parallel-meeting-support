@@ -178,6 +178,7 @@ class DeepgramTranscriptPrinter:
                             "room": self._room.name,
                             "participant": participant_identity,
                             "text": text,
+                            "timestamp": int(datetime.now().timestamp() * 1000),
                         }).encode("utf-8")
                         asyncio.create_task(
                             self._room.local_participant.publish_data(
