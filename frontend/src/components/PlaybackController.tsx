@@ -212,6 +212,12 @@ const PlaybackController = forwardRef<PlaybackControllerHandle, Props>(
       zIndex: 1,
       pointerEvents: 'none',
     };
+    const dimOverlayStyle: CSSProperties = {
+      position: 'absolute',
+      inset: 0,
+      background: 'rgba(0,0,0,0.6)',
+      pointerEvents: 'none',
+    };
 
     return (
       <div style={{ display: 'flex', width: '100%', height: '100%' }}>
@@ -222,6 +228,7 @@ const PlaybackController = forwardRef<PlaybackControllerHandle, Props>(
             playsInline
             style={{ width: '100%', height: '100%', objectFit: 'contain' }}
           />
+          {scheduler.focus !== 'A' && <div style={dimOverlayStyle} />}
         </div>
         <div style={panelStyle('B')}>
           <div style={labelStyle}>B{scheduler.focus === 'B' ? ' ▶' : ''}</div>
@@ -230,6 +237,7 @@ const PlaybackController = forwardRef<PlaybackControllerHandle, Props>(
             playsInline
             style={{ width: '100%', height: '100%', objectFit: 'contain' }}
           />
+          {scheduler.focus !== 'B' && <div style={dimOverlayStyle} />}
         </div>
       </div>
     );

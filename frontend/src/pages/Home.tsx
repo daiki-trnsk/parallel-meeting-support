@@ -37,7 +37,7 @@ const Home: React.FC = () => {
         }),
       );
       sessionStorage.setItem('livekit_session', JSON.stringify(sessions));
-      navigate('/meeting');
+      navigate(role.rooms.length > 1 ? '/comma-debug' : '/meeting');
     } catch (e: any) {
       setError(e?.message ?? 'トークン取得に失敗しました');
     } finally {

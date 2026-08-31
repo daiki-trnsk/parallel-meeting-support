@@ -3,13 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import '@livekit/components-styles';
 import { LiveKitRoom } from '@livekit/components-react';
 import type { Room } from 'livekit-client';
-import CommaTrackBridge from '../components/CommaTrackBridge';
+import CommaTrackBridge, { type SakuraTrack } from '../components/CommaTrackBridge';
 import PlaybackController, {
   type PlaybackControllerHandle,
   type DebugEvent,
 } from '../components/PlaybackController';
 import DebugReadout from '../components/DebugReadout';
 import { useSubtitleSync, type SubtitleEntry } from '../hooks/useSubtitleSync';
+import { useCompositeMeetingStream } from '../hooks/useCompositeMeetingStream';
 
 type RoomSession = { token: string; url: string; room: string; identity: string; name?: string };
 
@@ -94,10 +95,8 @@ const SubtitleColumn: React.FC<{ entries: SubtitleEntry[]; borderRight?: boolean
 const CommaDebug: React.FC = () => {
   const navigate = useNavigate();
   const [sessions, setSessions] = useState<RoomSession[] | null>(null);
-  const [trackA, setTrackA] = useState<MediaStreamTrack | null>(null);
-  const [trackB, setTrackB] = useState<MediaStreamTrack | null>(null);
-  const [audioTrackA, setAudioTrackA] = useState<MediaStreamTrack | null>(null);
-  const [audioTrackB, setAudioTrackB] = useState<MediaStreamTrack | null>(null);
+  const [sakuraTracksA, setSakuraTracksA] = useState<SakuraTrack[]>([]);
+  const [sakuraTracksB, setSakuraTracksB] = useState<SakuraTrack[]>([]);
   const [roomA, setRoomA] = useState<Room | null>(null);
   const [roomB, setRoomB] = useState<Room | null>(null);
   const [started, setStarted] = useState(false);
@@ -131,6 +130,14 @@ const CommaDebug: React.FC = () => {
   }, []);
 
   const { visible: subtitles } = useSubtitleSync({ roomA, roomB });
+  const { videoTrack: trackA, audioTrack: audioTrackA } = useCompositeMeetingStream(
+    sakuraTracksA,
+    'A',
+  );
+  const { videoTrack: trackB, audioTrack: audioTrackB } = useCompositeMeetingStream(
+    sakuraTracksB,
+    'B',
+  );
 
   if (!sessions) {
     return <div style={{ padding: 24 }}>Loading...</div>;
@@ -156,7 +163,7 @@ const CommaDebug: React.FC = () => {
             controllerRef.current?.unlockPlayback();
             setStarted(true);
           }}
-          disabled={started || !trackA || !trackB}
+          disabled={started || sakuraTracksA.length === 0 || sakuraTracksB.length === 0}
           style={{ padding: '6px 10px' }}
         >
           開始
@@ -169,10 +176,10 @@ const CommaDebug: React.FC = () => {
       {/* Hidden LiveKitRoom connections — only used to obtain the remote camera/mic MediaStreamTrack + Room */}
       <div style={{ display: 'none' }}>
         <LiveKitRoom serverUrl={sessionA.url} token={sessionA.token} connect video audio={false}>
-          <CommaTrackBridge onTrack={setTrackA} onAudioTrack={setAudioTrackA} onRoom={setRoomA} />
+          <CommaTrackBridge onTracks={setSakuraTracksA} onRoom={setRoomA} />
         </LiveKitRoom>
         <LiveKitRoom serverUrl={sessionB.url} token={sessionB.token} connect video audio={false}>
-          <CommaTrackBridge onTrack={setTrackB} onAudioTrack={setAudioTrackB} onRoom={setRoomB} />
+          <CommaTrackBridge onTracks={setSakuraTracksB} onRoom={setRoomB} />
         </LiveKitRoom>
       </div>
 
