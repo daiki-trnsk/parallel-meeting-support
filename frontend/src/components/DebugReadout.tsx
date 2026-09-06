@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import type { PlaybackControllerHandle, PlaybackSnapshot, DebugEvent } from './PlaybackController';
 import type { MeetingId } from '../hooks/useMeetingRecorder';
+import type { LostWindow } from '../hooks/useSummonSignal';
 
 const POLL_INTERVAL_MS = 200;
 const MAX_LOG_ENTRIES = 30;
@@ -14,28 +15,45 @@ function formatBuffered(buffered: TimeRanges | null): string {
   return parts.join(' ');
 }
 
+function clockTime(epochMs: number): string {
+  const d = new Date(epochMs);
+  return `${d.toLocaleTimeString('ja-JP', { hour12: false })}.${String(d.getMilliseconds()).padStart(3, '0')}`;
+}
+
 type Props = {
   controllerRef: React.RefObject<PlaybackControllerHandle | null>;
   events: DebugEvent[];
+  lostWindows?: LostWindow[];
 };
 
-const meetingRow = (id: MeetingId, snapshot: PlaybackSnapshot | null) => {
+const meetingRow = (id: MeetingId, snapshot: PlaybackSnapshot | null, nowMs: number) => {
   const v = snapshot?.videos[id];
+  // `behind` is the whole point of the media-time → wall-clock anchor: how
+  // far the footage on screen trails real life, i.e. how big a lost window
+  // a summon on this meeting would open right now.
+  const behindSec = v?.playbackEpochMs != null ? (nowMs - v.playbackEpochMs) / 1000 : null;
   return (
     <div key={id} style={{ marginBottom: 4 }}>
       <strong>{id}</strong> state={v?.recorderState ?? '-'} currentTime={v?.currentTime.toFixed(2) ?? '-'}{' '}
       rate={v?.playbackRate.toFixed(1) ?? '-'} buffered={formatBuffered(v?.buffered ?? null)}
+      <div style={{ paddingLeft: 12, color: '#999' }}>
+        anchor={v?.recordingStartEpochMs != null ? clockTime(v.recordingStartEpochMs) : '-'}{' '}
+        watching={v?.playbackEpochMs != null ? clockTime(v.playbackEpochMs) : '-'}{' '}
+        behind={behindSec != null ? `${behindSec.toFixed(2)}s` : '-'}
+      </div>
     </div>
   );
 };
 
-const DebugReadout: React.FC<Props> = ({ controllerRef, events }) => {
+const DebugReadout: React.FC<Props> = ({ controllerRef, events, lostWindows = [] }) => {
   const [snapshot, setSnapshot] = useState<PlaybackSnapshot | null>(null);
+  const [nowMs, setNowMs] = useState(() => Date.now());
 
   useEffect(() => {
     const interval = window.setInterval(() => {
       const s = controllerRef.current?.getSnapshot() ?? null;
       setSnapshot(s);
+      setNowMs(Date.now());
     }, POLL_INTERVAL_MS);
     return () => window.clearInterval(interval);
   }, [controllerRef]);
@@ -58,8 +76,21 @@ const DebugReadout: React.FC<Props> = ({ controllerRef, events }) => {
         focus=<strong>{snapshot?.focus ?? '-'}</strong> cycleIndex={snapshot?.cycleIndex ?? '-'}{' '}
         {snapshot?.isWarmup ? '(warmup)' : ''}
       </div>
-      {meetingRow('A', snapshot)}
-      {meetingRow('B', snapshot)}
+      {meetingRow('A', snapshot, nowMs)}
+      {meetingRow('B', snapshot, nowMs)}
+      <div style={{ marginTop: 8, borderTop: '1px solid #333', paddingTop: 4 }}>
+        <div style={{ color: '#888' }}>lost windows ({lostWindows.length})</div>
+        {lostWindows
+          .slice(-MAX_LOG_ENTRIES)
+          .reverse()
+          .map((w) => (
+            <div key={w.id} style={{ color: w.cause === 'realtime-jump' ? '#ffb74d' : '#b39ddb' }}>
+              {w.room} {clockTime(w.startEpochMs)} → {clockTime(w.endEpochMs)} (
+              {((w.endEpochMs - w.startEpochMs) / 1000).toFixed(2)}s){' '}
+              {w.cause === 'realtime-jump' ? 'jump' : 'unattended'}
+            </div>
+          ))}
+      </div>
       <div style={{ marginTop: 8, borderTop: '1px solid #333', paddingTop: 4 }}>
         {recentEvents.map((e, i) => (
           <div key={i} style={{ color: e.event === 'catchup-missed' ? '#ff8080' : '#8ab4f8' }}>

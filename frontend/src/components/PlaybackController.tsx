@@ -25,7 +25,17 @@ export type PlaybackSnapshot = {
   isWarmup: boolean;
   videos: Record<
     MeetingId,
-    { currentTime: number; playbackRate: number; buffered: TimeRanges | null; recorderState: string }
+    {
+      currentTime: number;
+      playbackRate: number;
+      buffered: TimeRanges | null;
+      recorderState: string;
+      /** Wall-clock anchor for this meeting's media timeline: media time 0
+       * === this epoch. null until MediaRecorder has actually started. */
+      recordingStartEpochMs: number | null;
+      /** currentTime translated onto the wall clock (see getPlaybackEpochMs). */
+      playbackEpochMs: number | null;
+    }
   >;
 };
 
@@ -43,6 +53,31 @@ export type PlaybackControllerHandle = {
    * cycling audio behind a RealtimeOverlay so it doesn't play alongside the
    * live overlay's own audio. */
   setMuted: (meeting: MeetingId, muted: boolean) => void;
+  /**
+   * "The footage the user is looking at right now was filmed at what
+   * wall-clock time?", in epoch ms — i.e. currentTime projected onto the
+   * same timeline subtitles carry.
+   *
+   * HTMLMediaElement.currentTime is a media-local timeline whose origin is
+   * the moment MediaRecorder started, so the conversion is anchored on
+   * useMeetingRecorder's recordingStartEpochMs (captured in `recorder.
+   * onstart`) rather than on any `Date.now() - currentTime` guesswork:
+   *
+   *   epoch(currentTime) = recordingStartEpochMs + currentTime * 1000
+   *
+   * Holds while paused and while playing at 2x alike, since currentTime is
+   * a position in the recording, not elapsed viewing time. Returns null
+   * before the recorder has started (no anchor yet ⇒ no honest answer).
+   */
+  getPlaybackEpochMs: (meeting: MeetingId) => number | null;
+  /**
+   * Same conversion applied to the newest buffered sample — the freshest
+   * frame the recording currently holds for this meeting. Debug/telemetry
+   * only; the realtime overlay bypasses this buffer entirely and shows the
+   * live tracks, so a summon's lost-window end comes from the overlay, not
+   * from here.
+   */
+  getLiveEdgeEpochMs: (meeting: MeetingId) => number | null;
 };
 
 type Props = {
@@ -97,6 +132,12 @@ const PlaybackController = forwardRef<PlaybackControllerHandle, Props>(
 
     const recFor = (m: MeetingId) => (m === 'A' ? recA : recB);
     const videoFor = (m: MeetingId) => (m === 'A' ? videoElA.current : videoElB.current);
+
+    const mediaTimeToEpochMs = (m: MeetingId, mediaTimeSec: number): number | null => {
+      const anchor = recFor(m).recordingStartEpochMs;
+      if (anchor === null) return null;
+      return anchor + mediaTimeSec * 1000;
+    };
 
     const forceCatchupIfNeeded = (meeting: MeetingId, cycleIndex: number) => {
       const el = videoFor(meeting);
@@ -173,6 +214,16 @@ const PlaybackController = forwardRef<PlaybackControllerHandle, Props>(
           const el = videoFor(meeting);
           if (el) el.muted = muted;
         },
+        getPlaybackEpochMs: (meeting) => {
+          const el = videoFor(meeting);
+          if (!el) return null;
+          return mediaTimeToEpochMs(meeting, el.currentTime);
+        },
+        getLiveEdgeEpochMs: (meeting) => {
+          const buffered = recFor(meeting).getBuffered();
+          if (!buffered || buffered.length === 0) return null;
+          return mediaTimeToEpochMs(meeting, buffered.end(buffered.length - 1));
+        },
         getSnapshot: () => ({
           focus: scheduler.focus,
           cycleIndex: scheduler.cycleIndex,
@@ -183,18 +234,26 @@ const PlaybackController = forwardRef<PlaybackControllerHandle, Props>(
               playbackRate: videoElA.current?.playbackRate ?? 0,
               buffered: recA.getBuffered(),
               recorderState: recA.state,
+              recordingStartEpochMs: recA.recordingStartEpochMs,
+              playbackEpochMs: mediaTimeToEpochMs('A', videoElA.current?.currentTime ?? 0),
             },
             B: {
               currentTime: videoElB.current?.currentTime ?? 0,
               playbackRate: videoElB.current?.playbackRate ?? 0,
               buffered: recB.getBuffered(),
               recorderState: recB.state,
+              recordingStartEpochMs: recB.recordingStartEpochMs,
+              playbackEpochMs: mediaTimeToEpochMs('B', videoElB.current?.currentTime ?? 0),
             },
           },
         }),
       }),
+      // recordingStart*EpochMs must be in the deps: the handle's closures
+      // capture the render they were built in, so without them a handle
+      // built before `recorder.onstart` would keep answering `null` from a
+      // stale null anchor forever.
       // eslint-disable-next-line react-hooks/exhaustive-deps
-      [scheduler.focus, scheduler.cycleIndex],
+      [scheduler.focus, scheduler.cycleIndex, recA.recordingStartEpochMs, recB.recordingStartEpochMs],
     );
 
     // Layout only, below — no recording/scheduling logic here. Both videos

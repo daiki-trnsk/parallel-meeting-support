@@ -4,6 +4,7 @@ import asyncio
 import importlib
 import json
 import os
+import time
 from datetime import datetime
 from typing import Any
 
@@ -26,6 +27,109 @@ SUMMON_KEYWORDS = [
 
 def _matches_summon_keyword(text: str) -> bool:
     return any(kw in text for kw in SUMMON_KEYWORDS)
+
+
+def _finite(value: Any) -> float | None:
+    """Deepgram の start/end は NOT_GIVEN（センチネル）になり得るので数値だけ通す。"""
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
+
+
+def _frame_duration_sec(frame: Any) -> float:
+    duration = _finite(getattr(frame, "duration", None))
+    if duration is not None:
+        return duration
+    samples = getattr(frame, "samples_per_channel", None)
+    rate = getattr(frame, "sample_rate", None)
+    if samples and rate:
+        return float(samples) / float(rate)
+    return 0.0
+
+
+class AudioClock:
+    """Deepgram のストリーム相対秒 ↔ Epoch の対応を保持する。
+
+    Deepgram の word start/end は「そこまでに投入された音声の累積長」で進む
+    のであって、壁時計で進むのではない。したがって
+
+        （ストリーム生成時刻）＋（相対秒）
+
+    という固定アンカー方式は、音声が途切れた瞬間に壊れる。ミュート・パケット
+    ロス・DTX・トラック再publish などで音声が流れなかった時間はそのまま音声
+    クロックの遅れになり、しかも二度と取り戻せない（Deepgram は流れてこな
+    かった音声を知らない）。長時間の会議ほど字幕の発話時刻が過去へずれ続け、
+    ロスト区間と全く噛み合わなくなる。
+
+    そこでアンカーを固定せず、フレームを投入するたびに「累積音声長」と「その
+    瞬間の壁時計」を組で更新する。相対秒 s の Epoch は
+
+        （最後に投入した壁時計）−（累積音声長 − s）
+
+    で求まる。音声が止まれば累積音声長も壁時計も同時に止まるので、再開後は
+    自動的に正しい対応へ戻る。ズレが蓄積しない。
+    """
+
+    __slots__ = ("pushed_sec", "wall_epoch")
+
+    def __init__(self) -> None:
+        self.pushed_sec = 0.0
+        self.wall_epoch = time.time()
+
+    def advance(self, duration_sec: float) -> None:
+        self.pushed_sec += duration_sec
+        self.wall_epoch = time.time()
+
+    def to_epoch_ms(self, stream_sec: float) -> int:
+        return int((self.wall_epoch - (self.pushed_sec - stream_sec)) * 1000)
+
+
+# 発話終了から Deepgram が final を返すまでの現実的な上限。これを超えて過去に
+# なる（＝クロックがずれた）結果は信用せず、確定時刻から組み立て直す。
+MAX_SPEECH_LAG_MS = 15_000
+
+
+def _speech_epoch_range_ms(alt: Any, clock: AudioClock, fallback_ms: int) -> tuple[int, int, str]:
+    """SpeechData を「実際に発話された Epoch 区間」へ変換する。
+
+    なお livekit-plugins-deepgram の stt.py は SpeechData.end_time を
+    `next(word.get("end") for ...)` で組み立てており、これは「最後」ではなく
+    「最初」の単語の end になってしまっている。そのため終端は words[-1] から
+    自前で取り、取れないときだけ end_time にフォールバックする。
+    """
+    words = getattr(alt, "words", None) or []
+    start_s = _finite(getattr(alt, "start_time", None))
+    if start_s is None and words:
+        start_s = _finite(getattr(words[0], "start_time", None))
+
+    end_s = None
+    if words:
+        end_s = _finite(getattr(words[-1], "end_time", None))
+    if end_s is None:
+        end_s = _finite(getattr(alt, "end_time", None))
+
+    if start_s is None and end_s is None:
+        # 発話時刻が一切取れない（words 無し・タイムスタンプ無し）ときだけ、
+        # 確定時刻で 1 点区間として近似する。
+        return fallback_ms, fallback_ms, "fallback-finalized"
+
+    if start_s is None:
+        start_s = end_s
+    if end_s is None or end_s < start_s:
+        end_s = start_s
+
+    start_ms = clock.to_epoch_ms(start_s)
+    end_ms = clock.to_epoch_ms(end_s)
+
+    # 最後の安全網。ストリーム再接続をまたぐと livekit-agents が start_time に
+    # 壁時計ベースの start_time_offset を足してくるため、音声ベースの累積長と
+    # 単位が食い違って現実離れした値になり得る。そのときは発話長だけ信用して
+    # 確定時刻から逆算する（ロスト判定が黙って死ぬよりはるかにまし）。
+    duration_ms = max(0, end_ms - start_ms)
+    if end_ms > fallback_ms + 1_000 or fallback_ms - end_ms > MAX_SPEECH_LAG_MS:
+        return fallback_ms - duration_ms, fallback_ms, "clock-resync"
+
+    return start_ms, end_ms, "deepgram"
 
 
 def _fmt_ts(ts: datetime) -> str:
@@ -160,10 +264,16 @@ class DeepgramTranscriptPrinter:
         audio_stream = rtc.AudioStream.from_track(track=publication.track)
         try:
             async with self._stt.stream(language="ja") as stt_stream:
+                # Deepgram の相対タイムスタンプを Epoch へ戻すための対応表。
+                # 音声を投入するたびに更新するので、音声が途切れてもズレが
+                # 蓄積しない（AudioClock の docstring 参照）。
+                clock = AudioClock()
+
                 async def _forward_audio() -> None:
                     try:
                         async for event in audio_stream:
                             stt_stream.push_frame(event.frame)
+                            clock.advance(_frame_duration_sec(event.frame))
                     finally:
                         stt_stream.end_input()
 
@@ -175,20 +285,38 @@ class DeepgramTranscriptPrinter:
                         if not event.alternatives:
                             continue
 
-                        text = event.alternatives[0].text.strip()
+                        alt = event.alternatives[0]
+                        text = alt.text.strip()
                         if not text:
                             continue
+
+                        finalized_ms = int(time.time() * 1000)
+                        speech_start_ms, speech_end_ms, speech_time_source = _speech_epoch_range_ms(
+                            alt, clock, finalized_ms
+                        )
 
                         print("[TRANSCRIPT]", flush=True)
                         print(f"room={self._room.name}", flush=True)
                         print(f"participant={participant_identity}", flush=True)
                         print(f"text={text}", flush=True)
+                        print(
+                            f"speech={speech_start_ms}..{speech_end_ms} "
+                            f"({speech_time_source}, lag={finalized_ms - speech_end_ms}ms)",
+                            flush=True,
+                        )
 
                         payload = json.dumps({
                             "room": self._room.name,
                             "participant": participant_identity,
                             "text": text,
-                            "timestamp": int(datetime.now().timestamp() * 1000),
+                            # 後方互換のため残すが、これは「Deepgram が確定させた時刻」で
+                            # あって発話時刻ではない。ロスト判定には使わないこと。
+                            "timestamp": finalized_ms,
+                            "finalized_at": finalized_ms,
+                            # ロスト区間との重なり判定に使う実発話区間。
+                            "speech_start_ms": speech_start_ms,
+                            "speech_end_ms": speech_end_ms,
+                            "speech_time_source": speech_time_source,
                         }).encode("utf-8")
                         asyncio.create_task(
                             self._room.local_participant.publish_data(
@@ -202,7 +330,10 @@ class DeepgramTranscriptPrinter:
                             summon_payload = json.dumps({
                                 "participant": participant_identity,
                                 "text": text,
-                                "timestamp": int(datetime.now().timestamp() * 1000),
+                                "timestamp": finalized_ms,
+                                "speech_start_ms": speech_start_ms,
+                                "speech_end_ms": speech_end_ms,
+                                "speech_time_source": speech_time_source,
                             }).encode("utf-8")
                             asyncio.create_task(
                                 self._room.local_participant.publish_data(

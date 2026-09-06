@@ -3,6 +3,17 @@ import type { SakuraTrack } from './CommaTrackBridge';
 
 type Props = {
   tracks: SakuraTrack[];
+  /**
+   * Fired once, when the first live tile actually starts rendering frames —
+   * i.e. the moment the user really arrives at realtime. useSummonSignal
+   * uses it to settle the lost window's end on the true landing point
+   * rather than on the moment the switch was requested; the gap is usually
+   * tens of ms, but it is footage the user missed all the same.
+   *
+   * Not fired when there are no tracks to play — in that case nothing was
+   * reached, and the lost window keeps its (shorter, safer) trigger-time end.
+   */
+  onLive?: () => void;
 };
 
 /**
@@ -17,8 +28,15 @@ type Props = {
  * <video> element instead, at full native quality/latency — same as a
  * normal one-on-one web meeting tile.
  */
-const RealtimeOverlay: React.FC<Props> = ({ tracks }) => {
+const RealtimeOverlay: React.FC<Props> = ({ tracks, onLive }) => {
   const videoRefs = useRef<(HTMLVideoElement | null)[]>([]);
+  const liveReportedRef = useRef(false);
+
+  const handlePlaying = () => {
+    if (liveReportedRef.current) return;
+    liveReportedRef.current = true;
+    onLive?.();
+  };
 
   useEffect(() => {
     tracks.forEach((t, i) => {
@@ -78,6 +96,7 @@ const RealtimeOverlay: React.FC<Props> = ({ tracks }) => {
           ref={(el) => {
             videoRefs.current[i] = el;
           }}
+          onPlaying={handlePlaying}
           playsInline
           style={{ flex: '1 1 0', minWidth: 0, minHeight: 0, width: '100%', height: '100%', objectFit: 'contain' }}
         />
