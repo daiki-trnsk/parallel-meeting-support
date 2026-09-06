@@ -9,8 +9,11 @@ import PlaybackController, {
   type DebugEvent,
 } from '../components/PlaybackController';
 import DebugReadout from '../components/DebugReadout';
+import RealtimeOverlay from '../components/RealtimeOverlay';
 import { useSubtitleSync, type SubtitleEntry } from '../hooks/useSubtitleSync';
+import { useSummonSignal, type SummonWindow } from '../hooks/useSummonSignal';
 import { useCompositeMeetingStream } from '../hooks/useCompositeMeetingStream';
+import type { MeetingId } from '../hooks/useMeetingRecorder';
 
 type RoomSession = { token: string; url: string; room: string; identity: string; name?: string };
 
@@ -21,10 +24,17 @@ const AT_BOTTOM_THRESHOLD = 30;
 // pattern: stays pinned to the bottom as new entries arrive, but stops
 // auto-scrolling as soon as the user scrolls away from the bottom, until
 // they explicitly ask to jump back.
-const SubtitleColumn: React.FC<{ entries: SubtitleEntry[]; borderRight?: boolean }> = ({
-  entries,
-  borderRight,
-}) => {
+function isInSummonWindow(entry: SubtitleEntry, windows: SummonWindow[]): boolean {
+  return windows.some(
+    (w) => entry.timestampEpochMs >= w.startMs && (w.endMs === null || entry.timestampEpochMs <= w.endMs),
+  );
+}
+
+const SubtitleColumn: React.FC<{
+  entries: SubtitleEntry[];
+  summonWindows: SummonWindow[];
+  borderRight?: boolean;
+}> = ({ entries, summonWindows, borderRight }) => {
   const [autoScroll, setAutoScroll] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -63,12 +73,22 @@ const SubtitleColumn: React.FC<{ entries: SubtitleEntry[]; borderRight?: boolean
         onScroll={handleScroll}
         style={{ flex: 1, overflowY: 'auto', padding: 8, color: '#ddd', fontSize: 13, textAlign: 'left' }}
       >
-        {entries.map((s) => (
-          <div key={s.id}>
-            <span style={{ color: '#7aabff', marginRight: 6, fontWeight: 600 }}>{s.participant}</span>
-            <span>{s.text}</span>
-          </div>
-        ))}
+        {entries.map((s) => {
+          const highlighted = isInSummonWindow(s, summonWindows);
+          return (
+            <div
+              key={s.id}
+              style={
+                highlighted
+                  ? { background: 'rgba(255,152,0,0.18)', borderLeft: '3px solid #ff9800', paddingLeft: 5 }
+                  : undefined
+              }
+            >
+              <span style={{ color: '#7aabff', marginRight: 6, fontWeight: 600 }}>{s.participant}</span>
+              <span>{s.text}</span>
+            </div>
+          );
+        })}
       </div>
       {!autoScroll && (
         <button
@@ -130,6 +150,10 @@ const CommaDebug: React.FC = () => {
   }, []);
 
   const { visible: subtitles } = useSubtitleSync({ roomA, roomB });
+  const { summonedRoom, summonWindows, clear: clearSummon, trigger: triggerSummon } = useSummonSignal({
+    roomA,
+    roomB,
+  });
   const { videoTrack: trackA, audioTrack: audioTrackA } = useCompositeMeetingStream(
     sakuraTracksA,
     'A',
@@ -138,6 +162,29 @@ const CommaDebug: React.FC = () => {
     sakuraTracksB,
     'B',
   );
+
+  // Mutes only the underlying <video> for the summoned meeting so its cycling
+  // audio doesn't overlap the RealtimeOverlay's own live audio. Does not
+  // touch PlaybackController's scheduling/catch-up logic in any way.
+  useEffect(() => {
+    (['A', 'B'] as MeetingId[]).forEach((m) => {
+      controllerRef.current?.setMuted(m, summonedRoom === m);
+    });
+  }, [summonedRoom]);
+
+  // Both LiveKitRoom connections are mounted with audio={false} — the local
+  // mic is never published by default (the 同時参加者 normally just watches
+  // both meetings). While summoned, publish the mic to *only* that room so
+  // サクラ actually hear the response; the other room's mic stays off so the
+  // user's voice never leaks into the meeting they're not addressing.
+  useEffect(() => {
+    roomA?.localParticipant.setMicrophoneEnabled(summonedRoom === 'A').catch((e) => {
+      console.error('[comma-debug] setMicrophoneEnabled(A) failed', e);
+    });
+    roomB?.localParticipant.setMicrophoneEnabled(summonedRoom === 'B').catch((e) => {
+      console.error('[comma-debug] setMicrophoneEnabled(B) failed', e);
+    });
+  }, [summonedRoom, roomA, roomB]);
 
   if (!sessions) {
     return <div style={{ padding: 24 }}>Loading...</div>;
@@ -168,6 +215,20 @@ const CommaDebug: React.FC = () => {
         >
           開始
         </button>
+        {summonedRoom && (
+          <button
+            onClick={clearSummon}
+            style={{ padding: '6px 10px', background: '#ff9800', color: '#000', fontWeight: 600 }}
+          >
+            応答終了（{summonedRoom}）
+          </button>
+        )}
+        <button onClick={() => triggerSummon('A')} disabled={!!summonedRoom} style={{ padding: '6px 10px' }}>
+          テスト: Aを呼びかけ
+        </button>
+        <button onClick={() => triggerSummon('B')} disabled={!!summonedRoom} style={{ padding: '6px 10px' }}>
+          テスト: Bを呼びかけ
+        </button>
         <button onClick={() => setDebugOpen((v) => !v)} style={{ padding: '6px 10px', marginLeft: 'auto' }}>
           {debugOpen ? 'デバッグ情報を閉じる ▲' : 'デバッグ情報 ▼'}
         </button>
@@ -184,7 +245,7 @@ const CommaDebug: React.FC = () => {
       </div>
 
       <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
-        <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
+        <div style={{ position: 'relative', display: 'flex', flex: 1, overflow: 'hidden' }}>
           <PlaybackController
             ref={controllerRef}
             trackA={trackA}
@@ -194,11 +255,21 @@ const CommaDebug: React.FC = () => {
             started={started}
             onDebugEvent={onDebugEvent}
           />
+          {/* Overlaid on top of (never replacing) PlaybackController's own
+              A/B panels below, which keep cycling untouched underneath. */}
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', pointerEvents: 'none' }}>
+            <div style={{ flex: '1 1 0', minWidth: 0, position: 'relative', overflow: 'hidden' }}>
+              {summonedRoom === 'A' && <RealtimeOverlay tracks={sakuraTracksA} />}
+            </div>
+            <div style={{ flex: '1 1 0', minWidth: 0, position: 'relative', overflow: 'hidden' }}>
+              {summonedRoom === 'B' && <RealtimeOverlay tracks={sakuraTracksB} />}
+            </div>
+          </div>
         </div>
 
         <div style={{ display: 'flex', height: 140, flexShrink: 0, borderTop: '1px solid #333' }}>
-          <SubtitleColumn entries={subtitlesA} borderRight />
-          <SubtitleColumn entries={subtitlesB} />
+          <SubtitleColumn entries={subtitlesA} summonWindows={summonWindows.filter((w) => w.room === 'A')} borderRight />
+          <SubtitleColumn entries={subtitlesB} summonWindows={summonWindows.filter((w) => w.room === 'B')} />
         </div>
 
         {/* Dropdown-style debug overlay: hidden by default, covers the A/B

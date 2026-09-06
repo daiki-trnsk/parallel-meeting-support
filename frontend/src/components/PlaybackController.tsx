@@ -38,6 +38,11 @@ export type PlaybackControllerHandle = {
    * `started` flips the actual comma playback on. Call this synchronously
    * from a click handler, not from an effect. */
   unlockPlayback: () => void;
+  /** Mutes/unmutes one meeting's underlying <video> element without touching
+   * its playback rate, scheduling, or catch-up logic — used to silence the
+   * cycling audio behind a RealtimeOverlay so it doesn't play alongside the
+   * live overlay's own audio. */
+  setMuted: (meeting: MeetingId, muted: boolean) => void;
 };
 
 type Props = {
@@ -163,6 +168,10 @@ const PlaybackController = forwardRef<PlaybackControllerHandle, Props>(
         unlockPlayback: () => {
           videoElA.current?.play().catch(() => {});
           videoElB.current?.play().catch(() => {});
+        },
+        setMuted: (meeting, muted) => {
+          const el = videoFor(meeting);
+          if (el) el.muted = muted;
         },
         getSnapshot: () => ({
           focus: scheduler.focus,

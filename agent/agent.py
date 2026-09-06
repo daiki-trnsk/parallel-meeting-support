@@ -17,6 +17,16 @@ load_dotenv()
 AGENT_ROOM = os.environ.get("PMS_AGENT_ROOM", "room-a")
 AGENT_IDENTITY = os.environ.get("PMS_AGENT_IDENTITY", "pms-agent-room-a")
 
+SUMMON_KEYWORDS = [
+    kw.strip()
+    for kw in os.environ.get("PMS_SUMMON_KEYWORDS", "田中").split(",")
+    if kw.strip()
+]
+
+
+def _matches_summon_keyword(text: str) -> bool:
+    return any(kw in text for kw in SUMMON_KEYWORDS)
+
 
 def _fmt_ts(ts: datetime) -> str:
     return ts.strftime("%Y-%m-%d %H:%M:%S")
@@ -187,6 +197,20 @@ class DeepgramTranscriptPrinter:
                                 reliable=True,
                             )
                         )
+
+                        if _matches_summon_keyword(text):
+                            summon_payload = json.dumps({
+                                "participant": participant_identity,
+                                "text": text,
+                                "timestamp": int(datetime.now().timestamp() * 1000),
+                            }).encode("utf-8")
+                            asyncio.create_task(
+                                self._room.local_participant.publish_data(
+                                    summon_payload,
+                                    topic="summon",
+                                    reliable=True,
+                                )
+                            )
                 finally:
                     await agents.utils.aio.cancel_and_wait(forward_task)
         finally:

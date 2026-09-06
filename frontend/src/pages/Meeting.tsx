@@ -76,13 +76,27 @@ const Meeting: React.FC = () => {
                   audio
                   style={{ height: '100%', display: 'flex', flexDirection: 'column' }}
                 >
-                  <div style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
+                  {/* auto (not hidden): LiveKit's own grid layout needs more
+                      height than this box has as participant count changes
+                      (1 vs 3 tiles, etc.) — with `hidden` that extra height
+                      was silently clipped, hiding the mic/camera control bar
+                      that sits at the bottom of VideoConference's own layout.
+                      `auto` keeps the control bar reachable via scroll
+                      instead of clipping it away. */}
+                  <div style={{ flex: 1, minHeight: 0, overflow: 'auto' }}>
                     <VideoConference />
                   </div>
                   <TranscriptPanel roomLabel={s.room} />
                 </LiveKitRoom>
               ) : (
-                <LiveKitRoom serverUrl={s.url} token={s.token} connect={true} video audio>
+                <LiveKitRoom
+                  serverUrl={s.url}
+                  token={s.token}
+                  connect={true}
+                  video
+                  audio
+                  style={{ height: '100%', overflow: 'auto' }}
+                >
                   <VideoConference />
                 </LiveKitRoom>
               )}
