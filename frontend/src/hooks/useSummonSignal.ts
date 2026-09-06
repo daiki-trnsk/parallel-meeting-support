@@ -407,25 +407,11 @@ export function useSummonSignal(params: UseSummonSignalParams): UseSummonSignalR
 }
 
 /**
- * True when a subtitle's utterance overlaps `window` by at least an instant.
- * Both sides are closed intervals on the same epoch clock, so this is the
- * plain interval-overlap test — deliberately whole-line: a subtitle
+ * True when a subtitle's utterance overlaps any lost window by at least an
+ * instant. Both sides are closed intervals on the same epoch clock, so this
+ * is the plain interval-overlap test — deliberately whole-line: a subtitle
  * straddling a boundary is highlighted in full. Over-highlighting by a few
  * words is the safe direction; missing part of the question is not.
- */
-export function overlapsOneLostWindow(
-  subtitle: { room: MeetingId; speechStartEpochMs: number; speechEndEpochMs: number },
-  window: LostWindow,
-): boolean {
-  return (
-    window.room === subtitle.room &&
-    subtitle.speechStartEpochMs <= window.endEpochMs &&
-    subtitle.speechEndEpochMs >= window.startEpochMs
-  );
-}
-
-/**
- * True when a subtitle falls in any lost window.
  *
  * Recomputed from the (immutable) window history on every render rather
  * than stamped onto entries when a window is created — that is what makes
@@ -436,5 +422,10 @@ export function overlapsLostWindow(
   subtitle: { room: MeetingId; speechStartEpochMs: number; speechEndEpochMs: number },
   windows: LostWindow[],
 ): boolean {
-  return windows.some((w) => overlapsOneLostWindow(subtitle, w));
+  return windows.some(
+    (w) =>
+      w.room === subtitle.room &&
+      subtitle.speechStartEpochMs <= w.endEpochMs &&
+      subtitle.speechEndEpochMs >= w.startEpochMs,
+  );
 }

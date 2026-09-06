@@ -11,12 +11,7 @@ import PlaybackController, {
 import DebugReadout from '../components/DebugReadout';
 import RealtimeOverlay from '../components/RealtimeOverlay';
 import { useSubtitleSync, type SubtitleEntry } from '../hooks/useSubtitleSync';
-import {
-  useSummonSignal,
-  overlapsLostWindow,
-  overlapsOneLostWindow,
-  type LostWindow,
-} from '../hooks/useSummonSignal';
+import { useSummonSignal, overlapsLostWindow, type LostWindow } from '../hooks/useSummonSignal';
 import { useCompositeMeetingStream } from '../hooks/useCompositeMeetingStream';
 import type { MeetingId } from '../hooks/useMeetingRecorder';
 
@@ -30,16 +25,12 @@ const AT_BOTTOM_THRESHOLD = 30;
 // auto-scrolling as soon as the user scrolls away from the bottom, until
 // they explicitly ask to jump back.
 //
-// One addition: when a lost window appears for this room, the column pins
-// that window's *first* line to the top instead of the bottom, so the
-// question the user is about to answer cannot be pushed off-screen by
-// whatever arrives next. Lines below it — including lost subtitles that
-// land a second or two late — still flow in underneath.
-//
-// The pin deliberately follows only the newest window. Anchoring on "the
-// first highlighted line" instead would drag the column back to a summon
-// from minutes ago as soon as a second one happened, and "最新へ戻る"
-// could never escape it: flipping autoScroll back on just re-ran the pin.
+// The column deliberately does NOT move itself to show lost-window lines.
+// An earlier version scrolled back to the first missed line when a summon
+// landed; following the live tail at all times turned out to read far
+// better, and the highlight alone is enough to pick the missed lines out.
+// Scrolling back through them is a manual act, and "最新へ戻る" exists only
+// to undo it.
 const SubtitleColumn: React.FC<{
   entries: SubtitleEntry[];
   lostWindows: LostWindow[];
@@ -47,27 +38,9 @@ const SubtitleColumn: React.FC<{
 }> = ({ entries, lostWindows, borderRight }) => {
   const [autoScroll, setAutoScroll] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const entryElRefs = useRef<Map<string, HTMLDivElement>>(new Map());
-  // Our own scrollTop writes fire 'scroll' just like a user gesture would.
-  // Without this guard, pinning to a lost window immediately looked like
-  // "user scrolled away from the bottom" and switched autoScroll off,
-  // leaving the column fighting itself.
+  // Our own scrollTop writes fire 'scroll' just like a user gesture would;
+  // without this guard they can be misread as "the user scrolled away".
   const programmaticScrollUntilRef = useRef(0);
-
-  const latestWindowId = lostWindows.length > 0 ? lostWindows[lostWindows.length - 1].id : null;
-
-  // Arm the pin on each *new* window, adjusting state during render (the
-  // documented React pattern) rather than from an effect, so there is no
-  // extra commit and no cascading-render lint violation.
-  const [seenWindowId, setSeenWindowId] = useState<string | null>(latestWindowId);
-  const [pinnedWindowId, setPinnedWindowId] = useState<string | null>(null);
-  if (latestWindowId !== seenWindowId) {
-    setSeenWindowId(latestWindowId);
-    setPinnedWindowId(latestWindowId);
-    // A summon just cost this room some footage — override any manual
-    // scroll so the missed lines are actually on screen.
-    setAutoScroll(true);
-  }
 
   // Highlighting is derived here, on every render, from the immutable
   // window history — never stamped onto entries when a window is created.
@@ -78,71 +51,29 @@ const SubtitleColumn: React.FC<{
     highlighted: overlapsLostWindow(entry, lostWindows),
   }));
 
-  const pinnedWindow = pinnedWindowId
-    ? (lostWindows.find((w) => w.id === pinnedWindowId) ?? null)
-    : null;
-  const anchorEntryId = pinnedWindow
-    ? (entries.find((e) => overlapsOneLostWindow(e, pinnedWindow))?.id ?? null)
-    : null;
+  const scrollToLatest = (el: HTMLDivElement) => {
+    programmaticScrollUntilRef.current = Date.now() + 200;
+    el.scrollTop = el.scrollHeight;
+  };
 
   useEffect(() => {
     const el = scrollRef.current;
-    if (!el) return;
-
-    const anchorEl = anchorEntryId ? entryElRefs.current.get(anchorEntryId) : undefined;
-    if (anchorEl) {
-      // Pinned: hold this position and make sure the first missed line is on
-      // screen — but move as little as possible to get it there. Yanking it
-      // to the top of the column is what made the list look like it had
-      // "jumped into the past"; usually it is already visible and the right
-      // amount of scrolling is none at all.
-      //
-      // offsetTop is a position *within the scrolled content* only because
-      // the scroll container is itself positioned (see position:'relative'
-      // below); otherwise it would be measured from a far ancestor and land
-      // nowhere near the intended line.
-      const top = anchorEl.offsetTop;
-      const bottom = top + anchorEl.offsetHeight;
-      let target: number | null = null;
-      if (top < el.scrollTop) target = top;
-      else if (bottom > el.scrollTop + el.clientHeight) target = bottom - el.clientHeight;
-      if (target !== null) {
-        programmaticScrollUntilRef.current = Date.now() + 200;
-        el.scrollTop = target;
-      }
-      return;
-    }
-
-    if (!autoScroll) return;
-    const bottom = el.scrollHeight - el.clientHeight;
-    if (Math.abs(el.scrollTop - bottom) < 1) return;
-    programmaticScrollUntilRef.current = Date.now() + 200;
-    el.scrollTop = el.scrollHeight;
-  }, [entries, autoScroll, anchorEntryId, lostWindows]);
+    if (!autoScroll || !el) return;
+    scrollToLatest(el);
+  }, [entries, autoScroll]);
 
   const handleScroll = useCallback(() => {
     const el = scrollRef.current;
     if (!el) return;
     if (Date.now() < programmaticScrollUntilRef.current) return;
-    // A real scroll gesture always wins: it releases the lost-window pin as
-    // well as bottom-following, so the user can never be dragged back to a
-    // position they just scrolled away from.
-    setPinnedWindowId(null);
     const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < AT_BOTTOM_THRESHOLD;
     setAutoScroll(atBottom);
   }, []);
 
-  // Releasing the pin is the part that makes this button actually work:
-  // turning autoScroll back on alone just re-ran the pin and bounced the
-  // column straight back to the lost window.
   const returnToLatest = () => {
-    setPinnedWindowId(null);
     setAutoScroll(true);
     const el = scrollRef.current;
-    if (el) {
-      programmaticScrollUntilRef.current = Date.now() + 200;
-      el.scrollTop = el.scrollHeight;
-    }
+    if (el) scrollToLatest(el);
   };
 
   return (
@@ -158,26 +89,12 @@ const SubtitleColumn: React.FC<{
       <div
         ref={scrollRef}
         onScroll={handleScroll}
-        style={{
-          flex: 1,
-          overflowY: 'auto',
-          // Makes this the offsetParent of the entry rows, so their
-          // offsetTop is a scroll position in this list and nothing else.
-          position: 'relative',
-          padding: 8,
-          color: '#ddd',
-          fontSize: 13,
-          textAlign: 'left',
-        }}
+        style={{ flex: 1, overflowY: 'auto', padding: 8, color: '#ddd', fontSize: 13, textAlign: 'left' }}
       >
         {rows.map(({ entry: s, highlighted }) => {
           return (
             <div
               key={s.id}
-              ref={(el) => {
-                if (el) entryElRefs.current.set(s.id, el);
-                else entryElRefs.current.delete(s.id);
-              }}
               style={
                 highlighted
                   ? { background: 'rgba(255,152,0,0.18)', borderLeft: '3px solid #ff9800', paddingLeft: 5 }
@@ -190,7 +107,7 @@ const SubtitleColumn: React.FC<{
           );
         })}
       </div>
-      {(!autoScroll || pinnedWindowId !== null) && (
+      {!autoScroll && (
         <button
           onClick={returnToLatest}
           style={{
@@ -274,12 +191,18 @@ const CommaDebug: React.FC = () => {
     'B',
   );
 
-  // Mutes only the underlying <video> for the summoned meeting so its cycling
-  // audio doesn't overlap the RealtimeOverlay's own live audio. Does not
-  // touch PlaybackController's scheduling/catch-up logic in any way.
+  // Silences *both* cycling <video> elements for the duration of a response.
+  // The user is holding a live conversation over the RealtimeOverlay; 2x
+  // catch-up audio from either meeting underneath — the summoned one or the
+  // other — is noise on that call, not something they can follow anyway.
+  // Restored the instant summonedRoom goes back to null. Touches nothing but
+  // el.muted: playback rate, scheduling and catch-up all keep running, so
+  // the footage still rolls past exactly as the lost-window bookkeeping in
+  // useSummonSignal assumes.
   useEffect(() => {
+    const responding = summonedRoom !== null;
     (['A', 'B'] as MeetingId[]).forEach((m) => {
-      controllerRef.current?.setMuted(m, summonedRoom === m);
+      controllerRef.current?.setMuted(m, responding);
     });
   }, [summonedRoom]);
 
