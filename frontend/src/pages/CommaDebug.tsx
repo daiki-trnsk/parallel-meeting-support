@@ -233,11 +233,11 @@ const CommaDebug: React.FC = () => {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#000' }}>
-      <div style={{ padding: 8, display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0 }}>
+      <div style={{ padding: 8, display: 'flex', alignItems: 'center', gap: 12, flexShrink: 0, position: 'relative' }}>
         <button onClick={() => navigate('/')} style={{ padding: '6px 10px' }}>
           戻る
         </button>
-        <div style={{ color: '#ccc' }}>コマ単位バッファ追いつき倍速再生 — デバッグ</div>
+        <div style={{ color: '#ccc' }}>同時参加者</div>
         <button
           onClick={() => {
             // Call synchronously from this click handler (not from an effect)
@@ -251,21 +251,43 @@ const CommaDebug: React.FC = () => {
         >
           開始
         </button>
-        {summonedRoom && (
-          <button
-            onClick={clearSummon}
-            style={{ padding: '6px 10px', background: '#ff9800', color: '#000', fontWeight: 600 }}
-          >
-            応答終了（{summonedRoom}）
-          </button>
-        )}
-        <button onClick={() => triggerSummon('A')} disabled={!!summonedRoom} style={{ padding: '6px 10px' }}>
-          テスト: Aを呼びかけ
+        {/* Always rendered and always horizontally centred (absolute, so the
+            variable-width left/right groups never shift it). Inactive exactly
+            like 開始 while not responding; active + blinking orange (light
+            ⇄ dark, see .comma-responding-pulse in index.css) while a summon
+            is being answered. */}
+        <button
+          onClick={clearSummon}
+          disabled={!summonedRoom}
+          className={summonedRoom ? 'comma-responding-pulse' : undefined}
+          style={{
+            position: 'absolute',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            padding: '6px 10px',
+            fontWeight: 600,
+            // Explicit bg/color is required here, so the browser's own
+            // disabled-greying (which the plain 開始 button relies on) never
+            // kicks in — spell both states out by hand instead.
+            background: summonedRoom ? '#ff9800' : '#3a3a3a',
+            color: summonedRoom ? '#000' : '#777',
+            border: summonedRoom ? '1px solid #ff9800' : '1px solid #555',
+            cursor: summonedRoom ? 'pointer' : 'default',
+          }}
+        >
+          応答終了{summonedRoom ? `（${summonedRoom}）` : ''}
+        </button>
+        <button
+          onClick={() => triggerSummon('A')}
+          disabled={!!summonedRoom}
+          style={{ padding: '6px 10px', marginLeft: 'auto' }}
+        >
+          test : A呼びかけ
         </button>
         <button onClick={() => triggerSummon('B')} disabled={!!summonedRoom} style={{ padding: '6px 10px' }}>
-          テスト: Bを呼びかけ
+          test : B呼びかけ
         </button>
-        <button onClick={() => setDebugOpen((v) => !v)} style={{ padding: '6px 10px', marginLeft: 'auto' }}>
+        <button onClick={() => setDebugOpen((v) => !v)} style={{ padding: '6px 10px' }}>
           {debugOpen ? 'デバッグ情報を閉じる ▲' : 'デバッグ情報 ▼'}
         </button>
       </div>
@@ -281,7 +303,26 @@ const CommaDebug: React.FC = () => {
       </div>
 
       <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
-        <div style={{ position: 'relative', display: 'flex', flex: 1, overflow: 'hidden' }}>
+        {/* Video row height is pinned to the footage's own aspect ratio
+            instead of `flex: 1`, so there is no tall black letterbox band
+            above/below the two 倍速 panels and the subtitle area can start
+            right under the visible frame. Each room's composite stream is a
+            640x240 canvas (2 × 320x240 cells, see useCompositeMeetingStream),
+            i.e. 8:3 per panel; two panels side by side ⇒ the row itself is
+            16:3. The RealtimeOverlay during 応答 is absolutely positioned to
+            `inset: 0` of this same box, so its height/scale never changes
+            relative to the 倍速 view. */}
+        <div
+          style={{
+            position: 'relative',
+            display: 'flex',
+            width: '100%',
+            aspectRatio: '16 / 3',
+            maxHeight: '68vh',
+            flexShrink: 0,
+            overflow: 'hidden',
+          }}
+        >
           <PlaybackController
             ref={controllerRef}
             trackA={trackA}
@@ -307,7 +348,7 @@ const CommaDebug: React.FC = () => {
           </div>
         </div>
 
-        <div style={{ display: 'flex', height: 140, flexShrink: 0, borderTop: '1px solid #333' }}>
+        <div style={{ display: 'flex', flex: 1, minHeight: 120, flexShrink: 1, borderTop: '1px solid #333' }}>
           <SubtitleColumn entries={subtitlesA} lostWindows={lostWindowsA} borderRight />
           <SubtitleColumn entries={subtitlesB} lostWindows={lostWindowsB} />
         </div>

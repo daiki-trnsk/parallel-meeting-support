@@ -109,3 +109,23 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+
+/* 応答終了ボタン: 応答中だけ付与。オレンジのまま明⇄暗を「ちかちか」と
+   点滅させて「今が応答中」であることを目立たせる。step-end で中間色を
+   挟まず瞬間的に切り替え、明暗のコントラストも強めに取る。CSS animation
+   はインライン style の background より優先されるので上書きできる。 */
+@keyframes commaRespondingPulse {
+  0% {
+    background-color: #ffd08a;
+  }
+  50% {
+    background-color: #b34700;
+  }
+  100% {
+    background-color: #ffd08a;
+  }
+}
+
+.comma-responding-pulse {
+  animation: commaRespondingPulse 1.4s step-end infinite;
+}
