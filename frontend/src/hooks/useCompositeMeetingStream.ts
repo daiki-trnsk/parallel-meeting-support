@@ -2,10 +2,15 @@ import { useEffect, useRef, useState } from 'react';
 import type { SakuraTrack } from '../components/CommaTrackBridge';
 import { MAX_SAKURA_PER_ROOM } from '../components/CommaTrackBridge';
 import type { MeetingId } from './useMeetingRecorder';
+import { speakerDisplay } from '../lib/speakerDisplay';
 
 const CELL_WIDTH = 320;
 const CELL_HEIGHT = 240;
 const CANVAS_FPS = 10;
+const LABEL_FONT = '14px sans-serif';
+const LABEL_MARGIN = 6;
+const LABEL_PADDING_X = 6;
+const LABEL_HEIGHT = 20;
 
 export type CompositeStream = {
   videoTrack: MediaStreamTrack | null;
@@ -35,6 +40,12 @@ export function useCompositeMeetingStream(
   meetingId: MeetingId,
 ): CompositeStream {
   const videoElRefs = useRef<(HTMLVideoElement | null)[]>(Array(MAX_SAKURA_PER_ROOM).fill(null));
+  // Identity per cell, read by the draw loop below to bake each サクラ's
+  // name label into the composited frame. Kept in a ref (rather than a
+  // useEffect dependency on the draw loop itself) so `tracks` churning on
+  // every mic-level event doesn't restart the canvas/interval — only the
+  // labels' source data updates.
+  const identitiesRef = useRef<(string | null)[]>(Array(MAX_SAKURA_PER_ROOM).fill(null));
   const audioCtxRef = useRef<AudioContext | null>(null);
   const audioDestRef = useRef<MediaStreamAudioDestinationNode | null>(null);
   const audioSourceNodesRef = useRef<Map<string, MediaStreamAudioSourceNode>>(new Map());
@@ -83,6 +94,26 @@ export function useCompositeMeetingStream(
         const x = cellX + (CELL_WIDTH - w) / 2;
         const y = (CELL_HEIGHT - h) / 2;
         ctx.drawImage(el, x, y, w, h);
+
+        // Small name label, bottom-left of this サクラ's cell, on a
+        // semi-transparent black backing so it stays legible over any
+        // footage. Baked into the canvas pixels (rather than an HTML
+        // overlay) so it stays pinned to the cell regardless of how the
+        // resulting <video> element is scaled/letterboxed downstream.
+        const identity = identitiesRef.current[i];
+        if (identity) {
+          const { label, color } = speakerDisplay(identity);
+          ctx.font = LABEL_FONT;
+          const textWidth = ctx.measureText(label).width;
+          const boxW = textWidth + LABEL_PADDING_X * 2;
+          const boxX = cellX + LABEL_MARGIN;
+          const boxY = CELL_HEIGHT - LABEL_MARGIN - LABEL_HEIGHT;
+          ctx.fillStyle = 'rgba(0,0,0,0.55)';
+          ctx.fillRect(boxX, boxY, boxW, LABEL_HEIGHT);
+          ctx.fillStyle = color;
+          ctx.textBaseline = 'middle';
+          ctx.fillText(label, boxX + LABEL_PADDING_X, boxY + LABEL_HEIGHT / 2);
+        }
       }
     }, 1000 / CANVAS_FPS);
 
@@ -120,6 +151,7 @@ export function useCompositeMeetingStream(
   // mic-level events) doesn't tear down/reattach unchanged tracks.
   useEffect(() => {
     for (let i = 0; i < MAX_SAKURA_PER_ROOM; i++) {
+      identitiesRef.current[i] = tracks[i]?.identity ?? null;
       const el = videoElRefs.current[i];
       const track = tracks[i]?.video ?? null;
       if (!el) continue;

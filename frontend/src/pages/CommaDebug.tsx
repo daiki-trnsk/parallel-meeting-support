@@ -14,6 +14,7 @@ import { useSubtitleSync, type SubtitleEntry } from '../hooks/useSubtitleSync';
 import { useSummonSignal, overlapsLostWindow, type LostWindow } from '../hooks/useSummonSignal';
 import { useCompositeMeetingStream } from '../hooks/useCompositeMeetingStream';
 import type { MeetingId } from '../hooks/useMeetingRecorder';
+import { speakerDisplay } from '../lib/speakerDisplay';
 
 type RoomSession = { token: string; url: string; room: string; identity: string; name?: string };
 
@@ -92,6 +93,7 @@ const SubtitleColumn: React.FC<{
         style={{ flex: 1, overflowY: 'auto', padding: 8, color: '#ddd', fontSize: 13, textAlign: 'left' }}
       >
         {rows.map(({ entry: s, highlighted }) => {
+          const { label, color } = speakerDisplay(s.participant);
           return (
             <div
               key={s.id}
@@ -101,8 +103,8 @@ const SubtitleColumn: React.FC<{
                   : undefined
               }
             >
-              <span style={{ color: '#7aabff', marginRight: 6, fontWeight: 600 }}>{s.participant}</span>
-              <span>{s.text}</span>
+              <span style={{ color, marginRight: 6, fontWeight: 600 }}>{label}</span>
+              <span style={{ color: '#fff' }}>{s.text}</span>
             </div>
           );
         })}
