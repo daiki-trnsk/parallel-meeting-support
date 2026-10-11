@@ -18,3 +18,19 @@ export const SELF_DISPLAY = { label: 'あなた', color: '#fff' };
 export function speakerDisplay(identity: string): { label: string; color: string } {
   return SPEAKER_DISPLAY[identity] ?? SELF_DISPLAY;
 }
+
+// 同時参加者 identities (実験群: subject-01, 統制群: subject-control-01) show up
+// in a サクラ's own video tile as "田中さん" — the summon keyword agent.py
+// listens for (PMS_SUMMON_KEYWORDS, default "田中") — so サクラ know what name
+// to call out to trigger a summon.
+const SUBJECT_IDENTITIES = new Set(['subject-01', 'subject-control-01']);
+
+/**
+ * Name label for a participant's video tile on a サクラ's own meeting screen
+ * (Meeting.tsx's SakuraMeetingView) — plain white text there regardless of
+ * identity, so this intentionally returns only the label, not a color.
+ */
+export function participantTileLabel(identity: string): string {
+  if (SUBJECT_IDENTITIES.has(identity)) return '田中さん';
+  return SPEAKER_DISPLAY[identity]?.label ?? identity;
+}

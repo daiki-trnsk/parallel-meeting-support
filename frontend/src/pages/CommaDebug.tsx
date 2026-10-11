@@ -15,11 +15,32 @@ import { useSummonSignal, overlapsLostWindow, type LostWindow } from '../hooks/u
 import { useCompositeMeetingStream } from '../hooks/useCompositeMeetingStream';
 import type { MeetingId } from '../hooks/useMeetingRecorder';
 import { speakerDisplay } from '../lib/speakerDisplay';
+import { meetingDisplayName } from '../lib/meetingLabels';
 
 type RoomSession = { token: string; url: string; room: string; identity: string; name?: string };
 
 const MAX_EVENTS = 200;
 const AT_BOTTOM_THRESHOLD = 30;
+
+const headingStyle: React.CSSProperties = {
+  flex: '1 1 0',
+  minWidth: 0,
+  padding: '8px 12px',
+  fontSize: 16,
+  fontWeight: 700,
+  color: '#eee',
+  textAlign: 'center',
+  background: '#1a1a1a',
+  borderBottom: '1px solid #555',
+  boxSizing: 'border-box',
+};
+
+const roomFrameStyle: React.CSSProperties = {
+  flex: '1 1 0',
+  minWidth: 0,
+  border: '2px solid #555',
+  boxSizing: 'border-box',
+};
 
 // Mirrors TranscriptPanel.tsx's auto-scroll-to-latest / "return to latest"
 // pattern: stays pinned to the bottom as new entries arrive, but stops
@@ -239,7 +260,7 @@ const CommaDebug: React.FC = () => {
         <button onClick={() => navigate('/')} style={{ padding: '6px 10px' }}>
           戻る
         </button>
-        <div style={{ color: '#ccc' }}>同時参加者</div>
+        <div style={{ color: '#ccc' }}>あなた：田中さん</div>
         <button
           onClick={() => {
             // Call synchronously from this click handler (not from an effect)
@@ -277,17 +298,17 @@ const CommaDebug: React.FC = () => {
             cursor: summonedRoom ? 'pointer' : 'default',
           }}
         >
-          応答終了{summonedRoom ? `（${summonedRoom}）` : ''}
+          応答終了{summonedRoom ? `（${meetingDisplayName(summonedRoom)}）` : ''}
         </button>
         <button
           onClick={() => triggerSummon('A')}
           disabled={!!summonedRoom}
           style={{ padding: '6px 10px', marginLeft: 'auto' }}
         >
-          test : A呼びかけ
+          test : {meetingDisplayName('A')}呼びかけ
         </button>
         <button onClick={() => triggerSummon('B')} disabled={!!summonedRoom} style={{ padding: '6px 10px' }}>
-          test : B呼びかけ
+          test : {meetingDisplayName('B')}呼びかけ
         </button>
         <button onClick={() => setDebugOpen((v) => !v)} style={{ padding: '6px 10px' }}>
           {debugOpen ? 'デバッグ情報を閉じる ▲' : 'デバッグ情報 ▼'}
@@ -305,54 +326,85 @@ const CommaDebug: React.FC = () => {
       </div>
 
       <div style={{ position: 'relative', display: 'flex', flexDirection: 'column', flex: 1, overflow: 'hidden' }}>
-        {/* Video row height is pinned to the footage's own aspect ratio
-            instead of `flex: 1`, so there is no tall black letterbox band
-            above/below the two 倍速 panels and the subtitle area can start
-            right under the visible frame. Each room's composite stream is a
-            640x240 canvas (2 × 320x240 cells, see useCompositeMeetingStream),
-            i.e. 8:3 per panel; two panels side by side ⇒ the row itself is
-            16:3. The RealtimeOverlay during 応答 is absolutely positioned to
-            `inset: 0` of this same box, so its height/scale never changes
-            relative to the 倍速 view. */}
+        {/* Wraps the heading + video + subtitle rows for both rooms, so a
+            single absolute frame overlay below can draw one continuous
+            border around each room's whole column (heading through
+            subtitles) without having to touch PlaybackController's or
+            SubtitleColumn's own internals — every row here splits 50/50 via
+            `flex: 1`, so the frame halves line up with all three rows. */}
         <div
           style={{
             position: 'relative',
             display: 'flex',
-            width: '100%',
-            aspectRatio: '16 / 3',
-            maxHeight: '68vh',
-            flexShrink: 0,
+            flexDirection: 'column',
+            flex: 1,
+            minHeight: 0,
             overflow: 'hidden',
           }}
         >
-          <PlaybackController
-            ref={controllerRef}
-            trackA={trackA}
-            trackB={trackB}
-            audioTrackA={audioTrackA}
-            audioTrackB={audioTrackB}
-            started={started}
-            onDebugEvent={onDebugEvent}
-          />
-          {/* Overlaid on top of (never replacing) PlaybackController's own
-              A/B panels below, which keep cycling untouched underneath. */}
-          <div style={{ position: 'absolute', inset: 0, display: 'flex', pointerEvents: 'none' }}>
-            <div style={{ flex: '1 1 0', minWidth: 0, position: 'relative', overflow: 'hidden' }}>
-              {summonedRoom === 'A' && (
-                <RealtimeOverlay tracks={sakuraTracksA} onLive={() => markRealtimeReached('A')} />
-              )}
-            </div>
-            <div style={{ flex: '1 1 0', minWidth: 0, position: 'relative', overflow: 'hidden' }}>
-              {summonedRoom === 'B' && (
-                <RealtimeOverlay tracks={sakuraTracksB} onLive={() => markRealtimeReached('B')} />
-              )}
+          <div style={{ display: 'flex', width: '100%', flexShrink: 0 }}>
+            <div style={headingStyle}>{meetingDisplayName('A')}</div>
+            <div style={headingStyle}>{meetingDisplayName('B')}</div>
+          </div>
+
+          {/* Video row height is pinned to the footage's own aspect ratio
+              instead of `flex: 1`, so there is no tall black letterbox band
+              above/below the two 倍速 panels and the subtitle area can start
+              right under the visible frame. Each room's composite stream is a
+              640x240 canvas (2 × 320x240 cells, see useCompositeMeetingStream),
+              i.e. 8:3 per panel; two panels side by side ⇒ the row itself is
+              16:3. The RealtimeOverlay during 応答 is absolutely positioned to
+              `inset: 0` of this same box, so its height/scale never changes
+              relative to the 倍速 view. */}
+          <div
+            style={{
+              position: 'relative',
+              display: 'flex',
+              width: '100%',
+              aspectRatio: '16 / 3',
+              maxHeight: '68vh',
+              flexShrink: 0,
+              overflow: 'hidden',
+            }}
+          >
+            <PlaybackController
+              ref={controllerRef}
+              trackA={trackA}
+              trackB={trackB}
+              audioTrackA={audioTrackA}
+              audioTrackB={audioTrackB}
+              started={started}
+              onDebugEvent={onDebugEvent}
+            />
+            {/* Overlaid on top of (never replacing) PlaybackController's own
+                A/B panels below, which keep cycling untouched underneath. */}
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', pointerEvents: 'none' }}>
+              <div style={{ flex: '1 1 0', minWidth: 0, position: 'relative', overflow: 'hidden' }}>
+                {summonedRoom === 'A' && (
+                  <RealtimeOverlay tracks={sakuraTracksA} onLive={() => markRealtimeReached('A')} />
+                )}
+              </div>
+              <div style={{ flex: '1 1 0', minWidth: 0, position: 'relative', overflow: 'hidden' }}>
+                {summonedRoom === 'B' && (
+                  <RealtimeOverlay tracks={sakuraTracksB} onLive={() => markRealtimeReached('B')} />
+                )}
+              </div>
             </div>
           </div>
-        </div>
 
-        <div style={{ display: 'flex', flex: 1, minHeight: 120, flexShrink: 1, borderTop: '1px solid #333' }}>
-          <SubtitleColumn entries={subtitlesA} lostWindows={lostWindowsA} borderRight />
-          <SubtitleColumn entries={subtitlesB} lostWindows={lostWindowsB} />
+          <div style={{ display: 'flex', flex: 1, minHeight: 120, flexShrink: 1 }}>
+            <SubtitleColumn entries={subtitlesA} lostWindows={lostWindowsA} />
+            <SubtitleColumn entries={subtitlesB} lostWindows={lostWindowsB} />
+          </div>
+
+          {/* Frame overlay: draws the border around each room's whole column
+              (heading through subtitles). Purely visual — pointerEvents:none
+              so it never intercepts clicks on SubtitleColumn's own
+              「最新へ戻る」 button underneath. */}
+          <div style={{ position: 'absolute', inset: 0, display: 'flex', pointerEvents: 'none' }}>
+            <div style={roomFrameStyle} />
+            <div style={roomFrameStyle} />
+          </div>
         </div>
 
         {/* Dropdown-style debug overlay: hidden by default, covers the A/B

@@ -5,8 +5,31 @@ import { LiveKitRoom } from '@livekit/components-react';
 import type { Room } from 'livekit-client';
 import CommaTrackBridge, { type SakuraTrack } from '../components/CommaTrackBridge';
 import LiveSakuraPanel, { type LiveSakuraPanelHandle } from '../components/LiveSakuraPanel';
+import MicIconButton from '../components/MicIconButton';
+import { meetingDisplayName } from '../lib/meetingLabels';
 
 type RoomSession = { token: string; url: string; room: string; identity: string; name?: string };
+
+const headingStyle: React.CSSProperties = {
+  padding: '8px 12px',
+  fontSize: 16,
+  fontWeight: 700,
+  color: '#eee',
+  textAlign: 'center',
+  background: '#1a1a1a',
+  borderBottom: '1px solid #555',
+  boxSizing: 'border-box',
+  flexShrink: 0,
+};
+
+const roomFrameStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  flex: 1,
+  minWidth: 0,
+  border: '2px solid #555',
+  boxSizing: 'border-box',
+};
 
 /**
  * 統制群 (control group) screen: same 同時参加者 entry flow and same per-room
@@ -75,7 +98,7 @@ const ControlDebug: React.FC = () => {
         <button onClick={() => navigate('/')} style={{ padding: '6px 10px' }}>
           戻る
         </button>
-        <div style={{ color: '#ccc' }}>同時参加者（統制群）</div>
+        <div style={{ color: '#ccc' }}>あなた：田中さん</div>
         <button
           onClick={() => {
             // Call synchronously from this click handler (not from an effect)
@@ -90,15 +113,6 @@ const ControlDebug: React.FC = () => {
         >
           開始
         </button>
-        <button
-          onClick={() => setMicOnA((v) => !v)}
-          style={{ padding: '6px 10px', marginLeft: 'auto' }}
-        >
-          {micOnA ? 'A: マイクOFF' : 'A: マイクON'}
-        </button>
-        <button onClick={() => setMicOnB((v) => !v)} style={{ padding: '6px 10px' }}>
-          {micOnB ? 'B: マイクOFF' : 'B: マイクON'}
-        </button>
       </div>
 
       {/* Hidden LiveKitRoom connections — only used to obtain the remote camera/mic MediaStreamTrack + Room */}
@@ -111,12 +125,41 @@ const ControlDebug: React.FC = () => {
         </LiveKitRoom>
       </div>
 
-      <div style={{ display: 'flex', width: '100%', flex: 1, overflow: 'hidden' }}>
-        <div style={{ flex: 1, minWidth: 0, borderRight: '1px solid #333' }}>
-          <LiveSakuraPanel ref={panelARef} tracks={sakuraTracksA} />
+      {/* Each room (heading + video + mic button) is wrapped in its own
+          bordered frame, so the whole room — not just the video — reads as
+          one enclosed unit. */}
+      <div style={{ display: 'flex', width: '100%' }}>
+        <div style={roomFrameStyle}>
+          <div style={headingStyle}>{meetingDisplayName('A')}</div>
+          {/* Video height is pinned to the footage's own aspect ratio (two
+              640x240 composite-equivalent panels side by side ⇒ 16:3 for the
+              pair, 8:3 per room) — not flex:1, so the panel's box never
+              grows/shrinks with the rest of the page, and (together with
+              LiveSakuraPanel's fixed MAX_SAKURA_PER_ROOM-slot grid) stays
+              visually identical whether 1 or 2 サクラ are currently present. */}
+          <div style={{ width: '100%', aspectRatio: '8 / 3', maxHeight: '68vh', flexShrink: 0, overflow: 'hidden' }}>
+            <LiveSakuraPanel ref={panelARef} tracks={sakuraTracksA} />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'center', padding: 8 }}>
+            <MicIconButton
+              enabled={micOnA}
+              onClick={() => setMicOnA((v) => !v)}
+              ariaLabel={`${meetingDisplayName('A')}のマイクを${micOnA ? 'オフ' : 'オン'}にする`}
+            />
+          </div>
         </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <LiveSakuraPanel ref={panelBRef} tracks={sakuraTracksB} />
+        <div style={roomFrameStyle}>
+          <div style={headingStyle}>{meetingDisplayName('B')}</div>
+          <div style={{ width: '100%', aspectRatio: '8 / 3', maxHeight: '68vh', flexShrink: 0, overflow: 'hidden' }}>
+            <LiveSakuraPanel ref={panelBRef} tracks={sakuraTracksB} />
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'center', padding: 8 }}>
+            <MicIconButton
+              enabled={micOnB}
+              onClick={() => setMicOnB((v) => !v)}
+              ariaLabel={`${meetingDisplayName('B')}のマイクを${micOnB ? 'オフ' : 'オン'}にする`}
+            />
+          </div>
         </div>
       </div>
     </div>

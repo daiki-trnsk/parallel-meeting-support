@@ -267,19 +267,6 @@ const PlaybackController = forwardRef<PlaybackControllerHandle, Props>(
       overflow: 'hidden',
       borderTop: `3px solid ${scheduler.focus === meeting ? '#4caf50' : '#333'}`,
     });
-    const labelStyle: CSSProperties = {
-      position: 'absolute',
-      top: 6,
-      left: 8,
-      fontSize: 12,
-      fontFamily: 'monospace',
-      color: '#ddd',
-      background: 'rgba(0,0,0,0.5)',
-      padding: '1px 6px',
-      borderRadius: 3,
-      zIndex: 1,
-      pointerEvents: 'none',
-    };
     const dimOverlayStyle: CSSProperties = {
       position: 'absolute',
       inset: 0,
@@ -290,7 +277,6 @@ const PlaybackController = forwardRef<PlaybackControllerHandle, Props>(
     return (
       <div style={{ display: 'flex', width: '100%', height: '100%' }}>
         <div style={panelStyle('A')}>
-          <div style={labelStyle}>A{scheduler.focus === 'A' ? ' ▶' : ''}</div>
           <video
             ref={attachVideoA}
             playsInline
@@ -299,7 +285,6 @@ const PlaybackController = forwardRef<PlaybackControllerHandle, Props>(
           {scheduler.focus !== 'A' && <div style={dimOverlayStyle} />}
         </div>
         <div style={panelStyle('B')}>
-          <div style={labelStyle}>B{scheduler.focus === 'B' ? ' ▶' : ''}</div>
           <video
             ref={attachVideoB}
             playsInline

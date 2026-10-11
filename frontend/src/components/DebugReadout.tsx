@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import type { PlaybackControllerHandle, PlaybackSnapshot, DebugEvent } from './PlaybackController';
 import type { MeetingId } from '../hooks/useMeetingRecorder';
 import type { LostWindow } from '../hooks/useSummonSignal';
+import { meetingDisplayName } from '../lib/meetingLabels';
 
 const POLL_INTERVAL_MS = 200;
 const MAX_LOG_ENTRIES = 30;
@@ -34,7 +35,7 @@ const meetingRow = (id: MeetingId, snapshot: PlaybackSnapshot | null, nowMs: num
   const behindSec = v?.playbackEpochMs != null ? (nowMs - v.playbackEpochMs) / 1000 : null;
   return (
     <div key={id} style={{ marginBottom: 4 }}>
-      <strong>{id}</strong> state={v?.recorderState ?? '-'} currentTime={v?.currentTime.toFixed(2) ?? '-'}{' '}
+      <strong>{meetingDisplayName(id)}</strong> state={v?.recorderState ?? '-'} currentTime={v?.currentTime.toFixed(2) ?? '-'}{' '}
       rate={v?.playbackRate.toFixed(1) ?? '-'} buffered={formatBuffered(v?.buffered ?? null)}
       <div style={{ paddingLeft: 12, color: '#999' }}>
         anchor={v?.recordingStartEpochMs != null ? clockTime(v.recordingStartEpochMs) : '-'}{' '}
@@ -73,7 +74,7 @@ const DebugReadout: React.FC<Props> = ({ controllerRef, events, lostWindows = []
       }}
     >
       <div style={{ marginBottom: 8 }}>
-        focus=<strong>{snapshot?.focus ?? '-'}</strong> cycleIndex={snapshot?.cycleIndex ?? '-'}{' '}
+        focus=<strong>{snapshot ? meetingDisplayName(snapshot.focus) : '-'}</strong> cycleIndex={snapshot?.cycleIndex ?? '-'}{' '}
         {snapshot?.isWarmup ? '(warmup)' : ''}
       </div>
       {meetingRow('A', snapshot, nowMs)}
@@ -85,7 +86,7 @@ const DebugReadout: React.FC<Props> = ({ controllerRef, events, lostWindows = []
           .reverse()
           .map((w) => (
             <div key={w.id} style={{ color: w.cause === 'realtime-jump' ? '#ffb74d' : '#b39ddb' }}>
-              {w.room} {clockTime(w.startEpochMs)} → {clockTime(w.endEpochMs)} (
+              {meetingDisplayName(w.room)} {clockTime(w.startEpochMs)} → {clockTime(w.endEpochMs)} (
               {((w.endEpochMs - w.startEpochMs) / 1000).toFixed(2)}s){' '}
               {w.cause === 'realtime-jump' ? 'jump' : 'unattended'}
             </div>
@@ -94,7 +95,7 @@ const DebugReadout: React.FC<Props> = ({ controllerRef, events, lostWindows = []
       <div style={{ marginTop: 8, borderTop: '1px solid #333', paddingTop: 4 }}>
         {recentEvents.map((e, i) => (
           <div key={i} style={{ color: e.event === 'catchup-missed' ? '#ff8080' : '#8ab4f8' }}>
-            [{e.cycleIndex}] {e.event} {e.meeting}
+            [{e.cycleIndex}] {e.event} {meetingDisplayName(e.meeting)}
             {'seekTarget' in e ? ` seek=${(e.seekTarget as number).toFixed(2)}` : ''}
             {'bufferedEnd' in e ? ` bufEnd=${(e.bufferedEnd as number).toFixed(2)}` : ''}
           </div>

@@ -4,18 +4,18 @@ import { useNavigate } from 'react-router-dom';
 type Role = { name: string; identity: string; rooms: string[]; destination: string };
 
 const ROLES: Role[] = [
-  { name: '参加者A (room-a)', identity: 'participant-a', rooms: ['room-a'], destination: '/meeting' },
-  { name: '参加者B (room-a)', identity: 'participant-b', rooms: ['room-a'], destination: '/meeting' },
-  { name: '参加者C (room-b)', identity: 'participant-c', rooms: ['room-b'], destination: '/meeting' },
-  { name: '参加者D (room-b)', identity: 'participant-d', rooms: ['room-b'], destination: '/meeting' },
+  { name: '参加者A (会議1)', identity: 'participant-a', rooms: ['room-a'], destination: '/meeting' },
+  { name: '参加者B (会議1)', identity: 'participant-b', rooms: ['room-a'], destination: '/meeting' },
+  { name: '参加者C (会議2)', identity: 'participant-c', rooms: ['room-b'], destination: '/meeting' },
+  { name: '参加者D (会議2)', identity: 'participant-d', rooms: ['room-b'], destination: '/meeting' },
   {
-    name: '同時参加者（実験群） (subject-01)',
+    name: '同時参加者（実験群）',
     identity: 'subject-01',
     rooms: ['room-a', 'room-b'],
     destination: '/comma-debug',
   },
   {
-    name: '同時参加者（統制群） (subject-control-01)',
+    name: '同時参加者（統制群）',
     identity: 'subject-control-01',
     rooms: ['room-a', 'room-b'],
     destination: '/control-debug',
