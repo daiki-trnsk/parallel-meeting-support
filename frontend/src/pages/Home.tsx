@@ -1,14 +1,25 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-type Role = { name: string; identity: string; rooms: string[] };
+type Role = { name: string; identity: string; rooms: string[]; destination: string };
 
 const ROLES: Role[] = [
-  { name: '参加者A (room-a)', identity: 'participant-a', rooms: ['room-a'] },
-  { name: '参加者B (room-a)', identity: 'participant-b', rooms: ['room-a'] },
-  { name: '参加者C (room-b)', identity: 'participant-c', rooms: ['room-b'] },
-  { name: '参加者D (room-b)', identity: 'participant-d', rooms: ['room-b'] },
-  { name: '同時参加者 (subject-01)', identity: 'subject-01', rooms: ['room-a', 'room-b'] },
+  { name: '参加者A (room-a)', identity: 'participant-a', rooms: ['room-a'], destination: '/meeting' },
+  { name: '参加者B (room-a)', identity: 'participant-b', rooms: ['room-a'], destination: '/meeting' },
+  { name: '参加者C (room-b)', identity: 'participant-c', rooms: ['room-b'], destination: '/meeting' },
+  { name: '参加者D (room-b)', identity: 'participant-d', rooms: ['room-b'], destination: '/meeting' },
+  {
+    name: '同時参加者（実験群） (subject-01)',
+    identity: 'subject-01',
+    rooms: ['room-a', 'room-b'],
+    destination: '/comma-debug',
+  },
+  {
+    name: '同時参加者（統制群） (subject-control-01)',
+    identity: 'subject-control-01',
+    rooms: ['room-a', 'room-b'],
+    destination: '/control-debug',
+  },
 ];
 
 type RoomSession = { token: string; url: string; room: string; identity: string; name?: string };
@@ -37,7 +48,7 @@ const Home: React.FC = () => {
         }),
       );
       sessionStorage.setItem('livekit_session', JSON.stringify(sessions));
-      navigate(role.rooms.length > 1 ? '/comma-debug' : '/meeting');
+      navigate(role.destination);
     } catch (e: any) {
       setError(e?.message ?? 'トークン取得に失敗しました');
     } finally {
