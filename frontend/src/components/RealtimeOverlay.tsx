@@ -1,5 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import type { SakuraTrack } from './CommaTrackBridge';
+import { MAX_SAKURA_PER_ROOM } from './CommaTrackBridge';
+import { speakerDisplay } from '../lib/speakerDisplay';
 
 type Props = {
   tracks: SakuraTrack[];
@@ -39,22 +41,23 @@ const RealtimeOverlay: React.FC<Props> = ({ tracks, onLive }) => {
   };
 
   useEffect(() => {
-    tracks.forEach((t, i) => {
+    for (let i = 0; i < MAX_SAKURA_PER_ROOM; i++) {
+      const t = tracks[i];
       const el = videoRefs.current[i];
-      if (!el) return;
+      if (!el) continue;
       const current = (el.srcObject as MediaStream | null) ?? null;
-      const wantVideo = t.video;
-      const wantAudio = t.audio;
+      const wantVideo = t?.video ?? null;
+      const wantAudio = t?.audio ?? null;
       const currentVideo = current?.getVideoTracks()[0] ?? null;
       const currentAudio = current?.getAudioTracks()[0] ?? null;
-      if (currentVideo === wantVideo && currentAudio === wantAudio) return;
+      if (currentVideo === wantVideo && currentAudio === wantAudio) continue;
 
       const streamTracks: MediaStreamTrack[] = [];
       if (wantVideo) streamTracks.push(wantVideo);
       if (wantAudio) streamTracks.push(wantAudio);
       el.srcObject = streamTracks.length > 0 ? new MediaStream(streamTracks) : null;
       el.play().catch(() => {});
-    });
+    }
   }, [tracks]);
 
   return (
@@ -90,17 +93,45 @@ const RealtimeOverlay: React.FC<Props> = ({ tracks, onLive }) => {
           参加者の映像を待機中...
         </div>
       )}
-      {tracks.map((t, i) => (
-        <video
-          key={t.identity}
-          ref={(el) => {
-            videoRefs.current[i] = el;
-          }}
-          onPlaying={handlePlaying}
-          playsInline
-          style={{ flex: '1 1 0', minWidth: 0, minHeight: 0, width: '100%', height: '100%', objectFit: 'contain' }}
-        />
-      ))}
+      {/* Fixed MAX_SAKURA_PER_ROOM-slot grid, same as the 倍速 composite
+          canvas, so each サクラ's tile and name label sit exactly where they
+          did before the switch to live. */}
+      {Array.from({ length: MAX_SAKURA_PER_ROOM }, (_, i) => {
+        const t: SakuraTrack | undefined = tracks[i];
+        const display = t ? speakerDisplay(t.identity) : null;
+        return (
+          <div key={i} style={{ position: 'relative', flex: '1 1 0', minWidth: 0, minHeight: 0 }}>
+            <video
+              ref={(el) => {
+                videoRefs.current[i] = el;
+              }}
+              onPlaying={handlePlaying}
+              playsInline
+              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+            />
+            {display && (
+              <div
+                style={{
+                  position: 'absolute',
+                  left: 6,
+                  bottom: 6,
+                  height: 20,
+                  lineHeight: '20px',
+                  padding: '0 6px',
+                  fontSize: 14,
+                  fontFamily: 'sans-serif',
+                  color: display.color,
+                  background: 'rgba(0,0,0,0.55)',
+                  pointerEvents: 'none',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {display.label}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 };

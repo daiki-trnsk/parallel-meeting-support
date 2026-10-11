@@ -5,7 +5,7 @@ import type { MeetingId } from './useMeetingRecorder';
 import { speakerDisplay } from '../lib/speakerDisplay';
 
 const CELL_WIDTH = 320;
-const CELL_HEIGHT = 240;
+const CELL_HEIGHT = 180;
 const CANVAS_FPS = 10;
 const LABEL_FONT = '14px sans-serif';
 const LABEL_MARGIN = 6;

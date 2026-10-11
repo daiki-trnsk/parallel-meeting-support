@@ -22,7 +22,7 @@ export type LiveSakuraPanelHandle = {
  * element.
  *
  * Always renders a fixed MAX_SAKURA_PER_ROOM-slot grid, same as the 実験群
- * composite canvas (always two 320x240 cells, see useCompositeMeetingStream)
+ * composite canvas (always two 320x180 cells, see useCompositeMeetingStream)
  * — an empty slot stays blank rather than letting the other slot's tile
  * stretch to fill the gap, so the panel's visual size/layout never shifts
  * depending on whether 1 or 2 サクラ are currently present.

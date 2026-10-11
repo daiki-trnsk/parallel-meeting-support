@@ -351,9 +351,9 @@ const CommaDebug: React.FC = () => {
               instead of `flex: 1`, so there is no tall black letterbox band
               above/below the two 倍速 panels and the subtitle area can start
               right under the visible frame. Each room's composite stream is a
-              640x240 canvas (2 × 320x240 cells, see useCompositeMeetingStream),
-              i.e. 8:3 per panel; two panels side by side ⇒ the row itself is
-              16:3. The RealtimeOverlay during 応答 is absolutely positioned to
+              640x180 canvas (2 × 320x180 cells, see useCompositeMeetingStream),
+              i.e. 32:9 per panel; two panels side by side ⇒ the row itself is
+              64:9. The RealtimeOverlay during 応答 is absolutely positioned to
               `inset: 0` of this same box, so its height/scale never changes
               relative to the 倍速 view. */}
           <div
@@ -361,7 +361,7 @@ const CommaDebug: React.FC = () => {
               position: 'relative',
               display: 'flex',
               width: '100%',
-              aspectRatio: '16 / 3',
+              aspectRatio: '64 / 9',
               maxHeight: '68vh',
               flexShrink: 0,
               overflow: 'hidden',

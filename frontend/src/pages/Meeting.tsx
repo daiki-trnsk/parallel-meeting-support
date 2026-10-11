@@ -112,7 +112,7 @@ const SakuraMeetingView: React.FC = () => {
             height: 'auto',
             maxWidth: '100%',
             maxHeight: '100%',
-            aspectRatio: '4 / 3',
+            aspectRatio: '16 / 9',
             display: 'grid',
             gridTemplateColumns: '1fr 1fr',
             gridTemplateRows: '1fr 1fr',

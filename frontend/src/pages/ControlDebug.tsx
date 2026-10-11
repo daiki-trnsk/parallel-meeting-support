@@ -132,12 +132,12 @@ const ControlDebug: React.FC = () => {
         <div style={roomFrameStyle}>
           <div style={headingStyle}>{meetingDisplayName('A')}</div>
           {/* Video height is pinned to the footage's own aspect ratio (two
-              640x240 composite-equivalent panels side by side ⇒ 16:3 for the
-              pair, 8:3 per room) — not flex:1, so the panel's box never
+              640x180 composite-equivalent panels side by side ⇒ 64:9 for the
+              pair, 32:9 per room) — not flex:1, so the panel's box never
               grows/shrinks with the rest of the page, and (together with
               LiveSakuraPanel's fixed MAX_SAKURA_PER_ROOM-slot grid) stays
               visually identical whether 1 or 2 サクラ are currently present. */}
-          <div style={{ width: '100%', aspectRatio: '8 / 3', maxHeight: '68vh', flexShrink: 0, overflow: 'hidden' }}>
+          <div style={{ width: '100%', aspectRatio: '32 / 9', maxHeight: '68vh', flexShrink: 0, overflow: 'hidden' }}>
             <LiveSakuraPanel ref={panelARef} tracks={sakuraTracksA} />
           </div>
           <div style={{ display: 'flex', justifyContent: 'center', padding: 8 }}>
@@ -150,7 +150,7 @@ const ControlDebug: React.FC = () => {
         </div>
         <div style={roomFrameStyle}>
           <div style={headingStyle}>{meetingDisplayName('B')}</div>
-          <div style={{ width: '100%', aspectRatio: '8 / 3', maxHeight: '68vh', flexShrink: 0, overflow: 'hidden' }}>
+          <div style={{ width: '100%', aspectRatio: '32 / 9', maxHeight: '68vh', flexShrink: 0, overflow: 'hidden' }}>
             <LiveSakuraPanel ref={panelBRef} tracks={sakuraTracksB} />
           </div>
           <div style={{ display: 'flex', justifyContent: 'center', padding: 8 }}>
