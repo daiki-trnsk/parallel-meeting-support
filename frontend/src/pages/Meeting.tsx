@@ -11,6 +11,7 @@ import {
   isTrackReference,
   useTracks,
 } from '@livekit/components-react';
+import type { TrackReferenceOrPlaceholder } from '@livekit/components-core';
 import { Track } from 'livekit-client';
 import TranscriptPanel from '../components/TranscriptPanel';
 import MicToggleButton from '../components/MicToggleButton';
@@ -19,7 +20,7 @@ import { SPEAKER_DISPLAY, participantTileLabel } from '../lib/speakerDisplay';
 
 const MAX_TILES = 4;
 
-type TrackSlot = ReturnType<typeof useTracks>[number];
+type TrackSlot = TrackReferenceOrPlaceholder;
 
 /**
  * One cell of SakuraMeetingView's fixed 2x2 grid. Deliberately bypasses
@@ -34,7 +35,15 @@ const SakuraParticipantTile: React.FC<{ trackRef: TrackSlot }> = ({ trackRef }) 
   const label = participantTileLabel(trackRef.participant.identity);
   return (
     <ParticipantTile trackRef={trackRef} disableSpeakingIndicator style={{ height: '100%', width: '100%' }}>
-      {isTrackReference(trackRef) ? <VideoTrack trackRef={trackRef} /> : <ParticipantPlaceholder />}
+      {isTrackReference(trackRef) ? (
+        // ParticipantTile's default video styling is object-fit: cover,
+        // which crops a 16:9 camera feed to fill this 4:3 cell. The
+        // 同時参加者 side's サクラ tiles use contain (top/bottom letterbox
+        // instead of cropping), so match that look here too.
+        <VideoTrack trackRef={trackRef} style={{ objectFit: 'contain' }} />
+      ) : (
+        <ParticipantPlaceholder />
+      )}
       <div
         style={{
           position: 'absolute',
@@ -73,7 +82,10 @@ const SakuraParticipantTile: React.FC<{ trackRef: TrackSlot }> = ({ trackRef }) 
  * dimensions ever change the size of the others.
  */
 const SakuraMeetingView: React.FC = () => {
-  const tracks = useTracks([Track.Source.Camera, Track.Source.ScreenShare]);
+  const tracks = useTracks([
+    { source: Track.Source.Camera, withPlaceholder: true },
+    { source: Track.Source.ScreenShare, withPlaceholder: false },
+  ]);
   const slots: (TrackSlot | undefined)[] = Array.from({ length: MAX_TILES }, (_, i) => tracks[i]);
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>

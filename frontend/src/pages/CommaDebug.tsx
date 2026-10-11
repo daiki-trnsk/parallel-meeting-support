@@ -300,7 +300,8 @@ const CommaDebug: React.FC = () => {
         >
           応答終了{summonedRoom ? `（${meetingDisplayName(summonedRoom)}）` : ''}
         </button>
-        <button
+        {/* Debug buttons 普段は非表示 */}
+        {/* <button
           onClick={() => triggerSummon('A')}
           disabled={!!summonedRoom}
           style={{ padding: '6px 10px', marginLeft: 'auto' }}
@@ -309,10 +310,10 @@ const CommaDebug: React.FC = () => {
         </button>
         <button onClick={() => triggerSummon('B')} disabled={!!summonedRoom} style={{ padding: '6px 10px' }}>
           test : {meetingDisplayName('B')}呼びかけ
-        </button>
-        <button onClick={() => setDebugOpen((v) => !v)} style={{ padding: '6px 10px' }}>
+        </button> */}
+        {/* <button onClick={() => setDebugOpen((v) => !v)} style={{ padding: '6px 10px' }}>
           {debugOpen ? 'デバッグ情報を閉じる ▲' : 'デバッグ情報 ▼'}
-        </button>
+        </button> */}
       </div>
 
       {/* Hidden LiveKitRoom connections — only used to obtain the remote camera/mic MediaStreamTrack + Room */}
