@@ -161,7 +161,7 @@ const CommaDebug: React.FC = () => {
   const [roomB, setRoomB] = useState<Room | null>(null);
   const [started, setStarted] = useState(false);
   const [events, setEvents] = useState<DebugEvent[]>([]);
-  const [debugOpen, setDebugOpen] = useState(false);
+  const [debugOpen] = useState(false);
 
   const controllerRef = useRef<PlaybackControllerHandle | null>(null);
 
@@ -202,7 +202,6 @@ const CommaDebug: React.FC = () => {
     summonedRoom,
     lostWindows,
     clear: clearSummon,
-    trigger: triggerSummon,
     markRealtimeReached,
   } = useSummonSignal({ roomA, roomB, getPlaybackEpochMs });
   const { videoTrack: trackA, audioTrack: audioTrackA } = useCompositeMeetingStream(
