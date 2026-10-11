@@ -80,6 +80,11 @@ export type PlaybackControllerHandle = {
   getLiveEdgeEpochMs: (meeting: MeetingId) => number | null;
 };
 
+/** The stretch of one meeting's footage the 2x catch-up is about to play
+ * through. Reported on every focus switch; null when nothing is catching up
+ * (the previous one ended, or the switch was a warmup / had no buffer). */
+export type CatchupStart = { meeting: MeetingId; startEpochMs: number } | null;
+
 type Props = {
   trackA: MediaStreamTrack | null;
   trackB: MediaStreamTrack | null;
@@ -87,10 +92,14 @@ type Props = {
   audioTrackB?: MediaStreamTrack | null;
   started: boolean;
   onDebugEvent?: (event: DebugEvent) => void;
+  onCatchupChange?: (catchup: CatchupStart) => void;
 };
 
 const PlaybackController = forwardRef<PlaybackControllerHandle, Props>(
-  ({ trackA, trackB, audioTrackA = null, audioTrackB = null, started, onDebugEvent }, ref) => {
+  (
+    { trackA, trackB, audioTrackA = null, audioTrackB = null, started, onDebugEvent, onCatchupChange },
+    ref,
+  ) => {
     const recA = useMeetingRecorder(trackA, audioTrackA, 'A');
     const recB = useMeetingRecorder(trackB, audioTrackB, 'B');
     const scheduler = useCommaScheduler(10000);
@@ -164,6 +173,9 @@ const PlaybackController = forwardRef<PlaybackControllerHandle, Props>(
       const target: MeetingId = scheduler.focus;
       const rec = recFor(target);
       const el = videoFor(target);
+      // The previous catch-up ended the moment focus moved; a new one is
+      // reported below only if this switch actually starts one.
+      onCatchupChange?.(null);
       if (!el) return;
 
       if (scheduler.isWarmup) {
@@ -183,6 +195,8 @@ const PlaybackController = forwardRef<PlaybackControllerHandle, Props>(
           el.playbackRate = 2.0;
           el.play().catch((e) => console.warn('[comma-debug] autoplay failed', e));
           emit({ event: 'focus-switch', meeting: target, cycleIndex: scheduler.cycleIndex, seekTarget, bufferedEnd });
+          const startEpochMs = mediaTimeToEpochMs(target, seekTarget);
+          if (startEpochMs !== null) onCatchupChange?.({ meeting: target, startEpochMs });
         }
       }
 

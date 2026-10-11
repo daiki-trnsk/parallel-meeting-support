@@ -7,6 +7,7 @@ import CommaTrackBridge, { type SakuraTrack } from '../components/CommaTrackBrid
 import PlaybackController, {
   type PlaybackControllerHandle,
   type DebugEvent,
+  type CatchupStart,
 } from '../components/PlaybackController';
 import DebugReadout from '../components/DebugReadout';
 import RealtimeOverlay from '../components/RealtimeOverlay';
@@ -56,8 +57,10 @@ const roomFrameStyle: React.CSSProperties = {
 const SubtitleColumn: React.FC<{
   entries: SubtitleEntry[];
   lostWindows: LostWindow[];
+  /** Footage this room's 2x catch-up is currently playing through, or null. */
+  catchupWindow: { startEpochMs: number; endEpochMs: number } | null;
   borderRight?: boolean;
-}> = ({ entries, lostWindows, borderRight }) => {
+}> = ({ entries, lostWindows, catchupWindow, borderRight }) => {
   const [autoScroll, setAutoScroll] = useState(true);
   const scrollRef = useRef<HTMLDivElement>(null);
   // Our own scrollTop writes fire 'scroll' just like a user gesture would;
@@ -68,10 +71,18 @@ const SubtitleColumn: React.FC<{
   // window history — never stamped onto entries when a window is created.
   // That is what makes late-arriving subtitles light up on their own and
   // keeps past windows highlighted when scrolling back through history.
-  const rows = entries.map((entry) => ({
-    entry,
-    highlighted: overlapsLostWindow(entry, lostWindows),
-  }));
+  //
+  // The catch-up highlight uses the same whole-line overlap rule, and yields
+  // to the lost highlight: a line in both shows as lost.
+  const rows = entries.map((entry) => {
+    const lost = overlapsLostWindow(entry, lostWindows);
+    const catchingUp =
+      !lost &&
+      catchupWindow !== null &&
+      entry.speechStartEpochMs <= catchupWindow.endEpochMs &&
+      entry.speechEndEpochMs >= catchupWindow.startEpochMs;
+    return { entry, highlighted: lost, catchingUp };
+  });
 
   const scrollToLatest = (el: HTMLDivElement) => {
     programmaticScrollUntilRef.current = Date.now() + 200;
@@ -113,16 +124,24 @@ const SubtitleColumn: React.FC<{
         onScroll={handleScroll}
         style={{ flex: 1, overflowY: 'auto', padding: 8, color: '#ddd', fontSize: 13, textAlign: 'left' }}
       >
-        {rows.map(({ entry: s, highlighted }) => {
+        {rows.map(({ entry: s, highlighted, catchingUp }) => {
           const { label, color } = speakerDisplay(s.participant);
           return (
             <div
               key={s.id}
-              style={
-                highlighted
-                  ? { background: 'rgba(255,152,0,0.18)', borderLeft: '3px solid #ff9800', paddingLeft: 5 }
-                  : undefined
-              }
+              // Every row reserves the same 3px border + 5px padding, so the
+              // text's left edge never shifts with the highlight.
+              style={{
+                borderLeft: `3px solid ${
+                  highlighted ? '#ff9800' : catchingUp ? '#9e9e9e' : 'transparent'
+                }`,
+                paddingLeft: 5,
+                background: highlighted
+                  ? 'rgba(255,152,0,0.18)'
+                  : catchingUp
+                    ? 'rgba(158,158,158,0.22)'
+                    : undefined,
+              }}
             >
               <span style={{ color, marginRight: 6, fontWeight: 600 }}>{label}</span>
               <span style={{ color: '#fff' }}>{s.text}</span>
@@ -196,6 +215,56 @@ const CommaDebug: React.FC = () => {
     (meeting: MeetingId) => controllerRef.current?.getPlaybackEpochMs(meeting) ?? null,
     [],
   );
+
+  // Footage the focused room's 2x catch-up is playing through: from where it
+  // was seeked to at the focus switch, out to the newest buffered frame. The
+  // start is fixed for the whole turn; the end is re-polled so lines landing
+  // (or footage buffering) mid-turn are included. Cleared when focus moves on.
+  //
+  // Each turn starts where the same room's previous turn ended (the newest
+  // buffered frame when focus left), not at the seek position converted to a
+  // time. The two are contiguous by design, but subtitle speech times and
+  // media positions skew by up to ~1s, which let a boundary line fall between
+  // two turns and go unhighlighted. The first turn of a room has no previous
+  // end and falls back to the seek position.
+  const [catchup, setCatchup] = useState<CatchupStart>(null);
+  const catchupRef = useRef<CatchupStart>(null);
+  const lastCatchupEndRef = useRef<Record<MeetingId, number | null>>({ A: null, B: null });
+  const onCatchupChange = useCallback((next: CatchupStart) => {
+    const prev = catchupRef.current;
+    if (prev && !next) {
+      const end = controllerRef.current?.getLiveEdgeEpochMs(prev.meeting) ?? null;
+      if (end !== null) lastCatchupEndRef.current[prev.meeting] = end;
+    }
+    let resolved = next;
+    if (next) {
+      const lastEnd = lastCatchupEndRef.current[next.meeting];
+      if (lastEnd !== null) {
+        resolved = { ...next, startEpochMs: Math.min(lastEnd, next.startEpochMs) };
+      }
+    }
+    catchupRef.current = resolved;
+    setCatchup(resolved);
+  }, []);
+  const [catchupEndEpochMs, setCatchupEndEpochMs] = useState<number | null>(null);
+  useEffect(() => {
+    if (!catchup) {
+      setCatchupEndEpochMs(null);
+      return;
+    }
+    const update = () =>
+      setCatchupEndEpochMs(controllerRef.current?.getLiveEdgeEpochMs(catchup.meeting) ?? null);
+    update();
+    const interval = window.setInterval(update, 500);
+    return () => window.clearInterval(interval);
+  }, [catchup]);
+  // Hidden (not cleared) for the whole realtime response: the catch-up state
+  // above keeps running underneath, so the highlight reappears on its own the
+  // moment the response ends, if that turn is still playing.
+  const catchupWindowFor = (meeting: MeetingId) =>
+    summonedRoom === null && catchup && catchup.meeting === meeting && catchupEndEpochMs !== null
+      ? { startEpochMs: catchup.startEpochMs, endEpochMs: catchupEndEpochMs }
+      : null;
 
   const { visible: subtitles } = useSubtitleSync({ roomA, roomB });
   const {
@@ -299,6 +368,28 @@ const CommaDebug: React.FC = () => {
         >
           応答終了{summonedRoom ? `（${meetingDisplayName(summonedRoom)}）` : ''}
         </button>
+        {/* Legend for the subtitle highlights; swatches mirror the real row
+            styles in SubtitleColumn. Pushed to the right edge. */}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 20, color: '#ccc', fontSize: 13 }}>
+          {[
+            { label: '再生中区間', background: 'rgba(158,158,158,0.22)', border: '#9e9e9e' },
+            { label: '消失区間', background: 'rgba(255,152,0,0.18)', border: '#ff9800' },
+          ].map((item) => (
+            <div key={item.label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span
+                style={{
+                  display: 'inline-block',
+                  width: 24,
+                  height: 14,
+                  background: item.background,
+                  borderLeft: `3px solid ${item.border}`,
+                  boxSizing: 'border-box',
+                }}
+              />
+              {item.label}
+            </div>
+          ))}
+        </div>
         {/* Debug buttons 普段は非表示 */}
         {/* <button
           onClick={() => triggerSummon('A')}
@@ -375,6 +466,7 @@ const CommaDebug: React.FC = () => {
               audioTrackB={audioTrackB}
               started={started}
               onDebugEvent={onDebugEvent}
+              onCatchupChange={onCatchupChange}
             />
             {/* Overlaid on top of (never replacing) PlaybackController's own
                 A/B panels below, which keep cycling untouched underneath. */}
@@ -393,8 +485,16 @@ const CommaDebug: React.FC = () => {
           </div>
 
           <div style={{ display: 'flex', flex: 1, minHeight: 120, flexShrink: 1 }}>
-            <SubtitleColumn entries={subtitlesA} lostWindows={lostWindowsA} />
-            <SubtitleColumn entries={subtitlesB} lostWindows={lostWindowsB} />
+            <SubtitleColumn
+              entries={subtitlesA}
+              lostWindows={lostWindowsA}
+              catchupWindow={catchupWindowFor('A')}
+            />
+            <SubtitleColumn
+              entries={subtitlesB}
+              lostWindows={lostWindowsB}
+              catchupWindow={catchupWindowFor('B')}
+            />
           </div>
 
           {/* Frame overlay: draws the border around each room's whole column
