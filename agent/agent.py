@@ -258,10 +258,20 @@ class DeepgramTranscriptPrinter:
     async def _transcribe_publication(
         self, participant_identity: str, publication: rtc.TrackPublication
     ) -> None:
-        if publication.track is None:
+        # タスク生成から実行までの間に、参加者のリロード・再publishでトラックが
+        # 解除されていることがある。解除済みトラックのハンドルでAudioStreamを
+        # 作ると FFI が "handle is not a FfiTrack" を返すので、事前に確認し、
+        # それでも失敗したら握りつぶさずログに残してこのトラックだけ諦める。
+        track = publication.track
+        if track is None or not publication.subscribed:
+            print(f"[agent] skip stale audio track {publication.sid} ({participant_identity})", flush=True)
             return
 
-        audio_stream = rtc.AudioStream.from_track(track=publication.track)
+        try:
+            audio_stream = rtc.AudioStream.from_track(track=track)
+        except Exception as e:
+            print(f"[agent] failed to open audio stream {publication.sid} ({participant_identity}): {e}", flush=True)
+            return
         try:
             async with self._stt.stream(language="ja") as stt_stream:
                 # Deepgram の相対タイムスタンプを Epoch へ戻すための対応表。
