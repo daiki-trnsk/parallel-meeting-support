@@ -10,6 +10,11 @@ import { useMeetingRecorder, type MeetingId } from '../hooks/useMeetingRecorder'
 import { useCommaScheduler, type FocusMeeting } from '../hooks/useCommaScheduler';
 
 const CATCHUP_EPSILON_SEC = 0.75;
+// Playback is held this far behind the buffer's live edge so the 2x catch-up
+// never runs dry at the end of a comma (MediaRecorder chunking + append
+// latency would otherwise stall or drop the tail).
+const PLAYBACK_DELAY_SEC = 0.5;
+const COMMA_SEC = 10;
 const EVICTION_INTERVAL_MS = 5000;
 
 export type DebugEvent = {
@@ -153,10 +158,11 @@ const PlaybackController = forwardRef<PlaybackControllerHandle, Props>(
       const buffered = recFor(meeting).getBuffered();
       if (!el || !buffered || buffered.length === 0) return;
       const bufferedEnd = buffered.end(buffered.length - 1);
-      if (bufferedEnd - el.currentTime > CATCHUP_EPSILON_SEC) {
-        el.currentTime = bufferedEnd;
+      if (bufferedEnd - el.currentTime > PLAYBACK_DELAY_SEC + CATCHUP_EPSILON_SEC) {
+        const currentTimeBefore = el.currentTime;
+        el.currentTime = Math.max(buffered.start(0), bufferedEnd - PLAYBACK_DELAY_SEC);
         el.playbackRate = 1.0;
-        emit({ event: 'catchup-missed', meeting, cycleIndex, bufferedEnd, currentTimeBefore: el.currentTime });
+        emit({ event: 'catchup-missed', meeting, cycleIndex, bufferedEnd, currentTimeBefore });
       }
     };
 
@@ -179,6 +185,13 @@ const PlaybackController = forwardRef<PlaybackControllerHandle, Props>(
       if (!el) return;
 
       if (scheduler.isWarmup) {
+        const warmBuffered = rec.getBuffered();
+        if (warmBuffered && warmBuffered.length > 0) {
+          el.currentTime = Math.max(
+            warmBuffered.start(0),
+            warmBuffered.end(warmBuffered.length - 1) - PLAYBACK_DELAY_SEC,
+          );
+        }
         el.playbackRate = 1.0;
         el.play().catch((e) => console.warn('[comma-debug] autoplay failed', e));
       } else {
@@ -190,7 +203,7 @@ const PlaybackController = forwardRef<PlaybackControllerHandle, Props>(
         } else {
           const bufferedStart = buffered.start(0);
           const bufferedEnd = buffered.end(buffered.length - 1);
-          const seekTarget = Math.max(bufferedStart, bufferedEnd - 10);
+          const seekTarget = Math.max(bufferedStart, bufferedEnd - COMMA_SEC - PLAYBACK_DELAY_SEC);
           el.currentTime = seekTarget;
           el.playbackRate = 2.0;
           el.play().catch((e) => console.warn('[comma-debug] autoplay failed', e));

@@ -22,6 +22,7 @@ type RoomSession = { token: string; url: string; room: string; identity: string;
 
 const MAX_EVENTS = 200;
 const AT_BOTTOM_THRESHOLD = 30;
+const CATCHUP_START_MARGIN_MS = 1000;
 
 const headingStyle: React.CSSProperties = {
   flex: '1 1 0',
@@ -74,13 +75,18 @@ const SubtitleColumn: React.FC<{
   //
   // The catch-up highlight uses the same whole-line overlap rule, and yields
   // to the lost highlight: a line in both shows as lost.
+  //
+  // The window start is widened by CATCHUP_START_MARGIN_MS so the line that
+  // was being spoken at the moment of the focus switch is included in full:
+  // speech times and media positions skew by up to ~1s, which otherwise lets
+  // that line (or the one just before a silence) fall just outside the range.
   const rows = entries.map((entry) => {
     const lost = overlapsLostWindow(entry, lostWindows);
     const catchingUp =
       !lost &&
       catchupWindow !== null &&
       entry.speechStartEpochMs <= catchupWindow.endEpochMs &&
-      entry.speechEndEpochMs >= catchupWindow.startEpochMs;
+      entry.speechEndEpochMs >= catchupWindow.startEpochMs - CATCHUP_START_MARGIN_MS;
     return { entry, highlighted: lost, catchingUp };
   });
 
@@ -220,32 +226,7 @@ const CommaDebug: React.FC = () => {
   // was seeked to at the focus switch, out to the newest buffered frame. The
   // start is fixed for the whole turn; the end is re-polled so lines landing
   // (or footage buffering) mid-turn are included. Cleared when focus moves on.
-  //
-  // Each turn starts where the same room's previous turn ended (the newest
-  // buffered frame when focus left), not at the seek position converted to a
-  // time. The two are contiguous by design, but subtitle speech times and
-  // media positions skew by up to ~1s, which let a boundary line fall between
-  // two turns and go unhighlighted. The first turn of a room has no previous
-  // end and falls back to the seek position.
   const [catchup, setCatchup] = useState<CatchupStart>(null);
-  const catchupRef = useRef<CatchupStart>(null);
-  const lastCatchupEndRef = useRef<Record<MeetingId, number | null>>({ A: null, B: null });
-  const onCatchupChange = useCallback((next: CatchupStart) => {
-    const prev = catchupRef.current;
-    if (prev && !next) {
-      const end = controllerRef.current?.getLiveEdgeEpochMs(prev.meeting) ?? null;
-      if (end !== null) lastCatchupEndRef.current[prev.meeting] = end;
-    }
-    let resolved = next;
-    if (next) {
-      const lastEnd = lastCatchupEndRef.current[next.meeting];
-      if (lastEnd !== null) {
-        resolved = { ...next, startEpochMs: Math.min(lastEnd, next.startEpochMs) };
-      }
-    }
-    catchupRef.current = resolved;
-    setCatchup(resolved);
-  }, []);
   const [catchupEndEpochMs, setCatchupEndEpochMs] = useState<number | null>(null);
   useEffect(() => {
     if (!catchup) {
@@ -466,7 +447,7 @@ const CommaDebug: React.FC = () => {
               audioTrackB={audioTrackB}
               started={started}
               onDebugEvent={onDebugEvent}
-              onCatchupChange={onCatchupChange}
+              onCatchupChange={setCatchup}
             />
             {/* Overlaid on top of (never replacing) PlaybackController's own
                 A/B panels below, which keep cycling untouched underneath. */}
