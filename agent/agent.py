@@ -25,6 +25,15 @@ SUMMON_KEYWORDS = [
 ]
 
 
+# 呼びかけられる側（実験対象者）自身の発話では summon を出さない。
+# 応答中の「田中です」などで再度応答中になるのを防ぐ。字幕(transcript)は従来通り出す。
+SUMMON_IGNORE_IDENTITIES = {
+    s.strip()
+    for s in os.environ.get("PMS_SUMMON_IGNORE_IDENTITIES", "subject-01").split(",")
+    if s.strip()
+}
+
+
 def _matches_summon_keyword(text: str) -> bool:
     return any(kw in text for kw in SUMMON_KEYWORDS)
 
@@ -336,7 +345,10 @@ class DeepgramTranscriptPrinter:
                             )
                         )
 
-                        if _matches_summon_keyword(text):
+                        if (
+                            participant_identity not in SUMMON_IGNORE_IDENTITIES
+                            and _matches_summon_keyword(text)
+                        ):
                             summon_payload = json.dumps({
                                 "participant": participant_identity,
                                 "text": text,

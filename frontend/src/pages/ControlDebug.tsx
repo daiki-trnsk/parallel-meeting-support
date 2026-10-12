@@ -109,6 +109,7 @@ const ControlDebug: React.FC = () => {
             setStarted(true);
           }}
           disabled={started || sakuraTracksA.length === 0 || sakuraTracksB.length === 0}
+          className={!started && sakuraTracksA.length > 0 && sakuraTracksB.length > 0 ? 'comma-start-pulse' : undefined}
           style={{ padding: '6px 10px' }}
         >
           開始

@@ -109,6 +109,12 @@ export type UseSummonSignalParams = {
    * Returning null (recorder not started) means no lost window is recorded.
    */
   getPlaybackEpochMs?: (room: MeetingId) => number | null;
+  /**
+   * When false, agent-driven summons are ignored (the manual `trigger` still
+   * works). Used to keep a "田中" heard before 開始 is pressed from starting a
+   * response. Defaults to true.
+   */
+  enabled?: boolean;
 };
 
 export type UseSummonSignalResult = {
@@ -149,7 +155,9 @@ const nextLostWindowId = (room: MeetingId) => `lw-${room}-${++lostWindowSeq}`;
  * in both meetings.
  */
 export function useSummonSignal(params: UseSummonSignalParams): UseSummonSignalResult {
-  const { roomA, roomB, getPlaybackEpochMs } = params;
+  const { roomA, roomB, getPlaybackEpochMs, enabled = true } = params;
+  const enabledRef = useRef(enabled);
+  enabledRef.current = enabled;
   const [summonedRoom, setSummonedRoom] = useState<MeetingId | null>(null);
   const [lostWindows, setLostWindows] = useState<LostWindow[]>([]);
   const [responseWindows, setResponseWindows] = useState<ResponseWindow[]>([]);
@@ -344,8 +352,14 @@ export function useSummonSignal(params: UseSummonSignalParams): UseSummonSignalR
     );
   }, []);
 
+  /** When the last response was ended. Summons for speech that finished before
+   * this are stale: Deepgram finalizes seconds after the words are spoken, so
+   * a "田中" said just before pressing 応答終了 arrives just after it. */
+  const lastClearedAtMsRef = useRef(0);
+
   const clear = useCallback(() => {
     if (summonedRoomRef.current === null) return;
+    lastClearedAtMsRef.current = Date.now();
     summonedRoomRef.current = null;
     pendingJumpRef.current = null;
     setSummonedRoom(null);
@@ -379,8 +393,25 @@ export function useSummonSignal(params: UseSummonSignalParams): UseSummonSignalR
     const subscriptions: Array<{ room: Room; handler: (...args: unknown[]) => void }> = [];
 
     const makeHandler = (meeting: MeetingId) => {
-      return (_payload: Uint8Array, _participant: unknown, _kind: unknown, topic?: string) => {
+      return (payload: Uint8Array, _participant: unknown, _kind: unknown, topic?: string) => {
         if (topic !== SUMMON_TOPIC) return;
+        if (!enabledRef.current) {
+          console.log(`[useSummonSignal] ignoring summon for ${meeting}: not started yet`);
+          return;
+        }
+        try {
+          const msg = JSON.parse(new TextDecoder().decode(payload)) as { speech_end_ms?: unknown };
+          const speechEndMs = typeof msg.speech_end_ms === 'number' ? msg.speech_end_ms : null;
+          if (speechEndMs !== null && speechEndMs <= lastClearedAtMsRef.current) {
+            console.log(
+              `[useSummonSignal] ignoring stale summon for ${meeting}: speech ended ` +
+                `${lastClearedAtMsRef.current - speechEndMs}ms before the last response ended`,
+            );
+            return;
+          }
+        } catch {
+          // Unparseable payload: fall through and treat it as a live summon.
+        }
         trigger(meeting);
       };
     };

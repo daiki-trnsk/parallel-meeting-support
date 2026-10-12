@@ -264,7 +264,7 @@ const CommaDebug: React.FC = () => {
     lostWindows,
     clear: clearSummon,
     markRealtimeReached,
-  } = useSummonSignal({ roomA, roomB, getPlaybackEpochMs });
+  } = useSummonSignal({ roomA, roomB, getPlaybackEpochMs, enabled: started });
   const { videoTrack: trackA, audioTrack: audioTrackA } = useCompositeMeetingStream(
     sakuraTracksA,
     'A',
