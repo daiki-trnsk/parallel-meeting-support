@@ -129,3 +129,21 @@ code {
 .comma-responding-pulse {
   animation: commaRespondingPulse 1.4s step-end infinite;
 }
+
+/* 開始ボタン: 押せるようになった（ready && 未開始）間だけ付与。
+   色やフォントは変えず、明るさ(filter)だけを明⇄暗で点滅させる。 */
+@keyframes commaStartPulse {
+  0% {
+    filter: brightness(1.6);
+  }
+  50% {
+    filter: brightness(1.0);
+  }
+  100% {
+    filter: brightness(1.6);
+  }
+}
+
+.comma-start-pulse {
+  animation: commaStartPulse 1.4s step-end infinite;
+}

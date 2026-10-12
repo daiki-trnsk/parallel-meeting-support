@@ -23,6 +23,7 @@ type RoomSession = { token: string; url: string; room: string; identity: string;
 const MAX_EVENTS = 200;
 const AT_BOTTOM_THRESHOLD = 30;
 const CATCHUP_START_MARGIN_MS = 1000;
+const READY_WAIT_MS = 15000;
 
 const headingStyle: React.CSSProperties = {
   flex: '1 1 0',
@@ -185,6 +186,9 @@ const CommaDebug: React.FC = () => {
   const [roomA, setRoomA] = useState<Room | null>(null);
   const [roomB, setRoomB] = useState<Room | null>(null);
   const [started, setStarted] = useState(false);
+  // 開始ボタンは、両ルームにサクラが揃ってから READY_WAIT_MS 経過するまで押せない。
+  // 録画バッファが溜まり、交互倍速の初期(1倍速warmup)区間も過ぎた状態で始めるため。
+  const [ready, setReady] = useState(false);
   const [events, setEvents] = useState<DebugEvent[]>([]);
   const [debugOpen] = useState(false);
 
@@ -206,6 +210,13 @@ const CommaDebug: React.FC = () => {
       navigate('/');
     }
   }, [navigate]);
+
+  const sakuraPresent = sakuraTracksA.length > 0 && sakuraTracksB.length > 0;
+  useEffect(() => {
+    if (!sakuraPresent || ready) return;
+    const id = window.setTimeout(() => setReady(true), READY_WAIT_MS);
+    return () => window.clearTimeout(id);
+  }, [sakuraPresent, ready]);
 
   const onDebugEvent = useCallback((e: DebugEvent) => {
     setEvents((prev) => {
@@ -318,10 +329,11 @@ const CommaDebug: React.FC = () => {
             controllerRef.current?.unlockPlayback();
             setStarted(true);
           }}
-          disabled={started || sakuraTracksA.length === 0 || sakuraTracksB.length === 0}
+          disabled={started || !ready}
+          className={ready && !started ? 'comma-start-pulse' : undefined}
           style={{ padding: '6px 10px' }}
         >
-          開始
+          {ready || started ? '開始' : '準備中…'}
         </button>
         {/* Always rendered and always horizontally centred (absolute, so the
             variable-width left/right groups never shift it). Inactive exactly
