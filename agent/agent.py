@@ -11,6 +11,14 @@ from typing import Any
 from dotenv import load_dotenv
 from livekit import agents, rtc
 
+try:
+    from meeting_recorder import create_recorder
+except Exception as _recorder_import_error:  # 録音が壊れていても文字起こしは止めない
+    print(f"[recorder] import failed, recording disabled: {_recorder_import_error!r}", flush=True)
+
+    def create_recorder(room: Any) -> Any:
+        return None
+
 deepgram = importlib.import_module("livekit.plugins.deepgram")
 
 load_dotenv()
@@ -425,6 +433,9 @@ async def entrypoint(ctx: agents.JobContext):
     printer = DeepgramTranscriptPrinter(room, transcript_stt)
     printer.start()
 
+    # 実験データ用の会議音声録音。文字起こしとは独立しており、失敗しても None になるだけ。
+    recorder = create_recorder(room)
+
     def _on_participant_connected(participant: rtc.RemoteParticipant) -> None:
         log_participant(room_name, participant, datetime.now())
 
@@ -432,7 +443,11 @@ async def entrypoint(ctx: agents.JobContext):
 
     async def _cleanup() -> None:
         room.off("participant_connected", _on_participant_connected)
-        await printer.aclose()
+        try:
+            await printer.aclose()
+        finally:
+            if recorder is not None:
+                await recorder.aclose()
 
     ctx.add_shutdown_callback(_cleanup)
 

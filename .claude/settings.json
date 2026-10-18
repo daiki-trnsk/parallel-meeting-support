@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs wc -l)",
+      "Bash(git log *)",
+      "Bash(grep -nE \"\\(LIVEKIT_API_SECRET|LIVEKIT_API_KEY|API_SECRET\\)\\\\s*[=:]\\\\s*['\\\\\"]?[A-Za-z0-9]{12,}\")",
+      "Bash(node -e 'const r=JSON.parse\\(require\\(\"fs\"\\).readFileSync\\(0,\"utf8\"\\)\\);for\\(const f of r\\){if\\(!f.messages.length\\)continue;console.log\\(f.filePath.split\\(\"src\"\\).pop\\(\\), f.messages.map\\(m=>m.ruleId+\"@\"+m.line\\).join\\(\", \"\\)\\)}')",
+      "Bash(./.venv/Scripts/python.exe -c \"import livekit.agents, livekit.plugins.deepgram as d; import importlib.metadata as m; print\\('agents', m.version\\('livekit-agents'\\), 'deepgram plugin', m.version\\('livekit-plugins-deepgram'\\)\\)\")",
+      "Bash(./.venv/Scripts/python.exe -m py_compile agent.py agent_dispatch.py)",
+      "Bash(git checkout *)",
+      "Bash(sed -i \"s/const ac = new AudioContext\\(\\);/const ac = new AudioContext\\(\\); window.AC = ac;/\" actx_test2.html)",
+      "Bash(python -)",
+      "Bash(pwd -W)",
+      "Bash(timeout 60 node run_cdp2.mjs \"$\\(pwd -W\\)/actx_test2.html\" resume_after_click)",
+      "Bash(./.venv/Scripts/python.exe -c \"import numpy, livekit; print\\(numpy.__version__\\)\")",
+      "Bash(./.venv/Scripts/python.exe -m pip list)",
+      "Bash(./.venv/Scripts/python.exe -)",
+      "Bash(./.venv/Scripts/python.exe -c \"import ast;ast.parse\\(open\\('meeting_recorder.py',encoding='utf-8'\\).read\\(\\)\\);print\\('ok'\\)\")",
+      "Bash(powershell -NoProfile -Command \"Get-CimInstance Win32_Process -Filter \\\\\"Name='python.exe'\\\\\" | Select-Object ProcessId,CreationDate,CommandLine | Format-List\")",
+      "Bash(grep -v -E '\\\\.pyc$|node_modules')"
+    ]
+  }
+}

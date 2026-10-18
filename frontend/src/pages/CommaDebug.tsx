@@ -11,9 +11,11 @@ import PlaybackController, {
 } from '../components/PlaybackController';
 import DebugReadout from '../components/DebugReadout';
 import RealtimeOverlay from '../components/RealtimeOverlay';
+import RecordingBadges from '../components/RecordingBadges';
 import { useSubtitleSync, type SubtitleEntry } from '../hooks/useSubtitleSync';
 import { useSummonSignal, overlapsLostWindow, type LostWindow } from '../hooks/useSummonSignal';
 import { useCompositeMeetingStream } from '../hooks/useCompositeMeetingStream';
+import { useRecordingControl } from '../hooks/useRecordingControl';
 import type { MeetingId } from '../hooks/useMeetingRecorder';
 import { speakerDisplay } from '../lib/speakerDisplay';
 import { meetingDisplayName } from '../lib/meetingLabels';
@@ -24,6 +26,8 @@ const MAX_EVENTS = 200;
 const AT_BOTTOM_THRESHOLD = 30;
 const CATCHUP_START_MARGIN_MS = 1000;
 const READY_WAIT_MS = 15000;
+// テスト用の呼びかけボタンを表示するか（本番実験時は false）
+const SHOW_TEST_SUMMON_BUTTONS = true;
 
 const headingStyle: React.CSSProperties = {
   flex: '1 1 0',
@@ -263,8 +267,10 @@ const CommaDebug: React.FC = () => {
     summonedRoom,
     lostWindows,
     clear: clearSummon,
+    trigger: triggerSummon,
     markRealtimeReached,
   } = useSummonSignal({ roomA, roomB, getPlaybackEpochMs, enabled: started });
+  const { start: startRecording, state: recordingState } = useRecordingControl({ roomA, roomB });
   const { videoTrack: trackA, audioTrack: audioTrackA } = useCompositeMeetingStream(
     sakuraTracksA,
     'A',
@@ -328,6 +334,7 @@ const CommaDebug: React.FC = () => {
             // gesture before comma playback (with audio) actually starts.
             controllerRef.current?.unlockPlayback();
             setStarted(true);
+            startRecording();
           }}
           disabled={started || !ready}
           className={ready && !started ? 'comma-start-pulse' : undefined}
@@ -335,6 +342,8 @@ const CommaDebug: React.FC = () => {
         >
           {ready || started ? '開始' : '準備中…'}
         </button>
+        {/* Experiment audio recording (agent side) acknowledgement per room. */}
+        {started && <RecordingBadges state={recordingState} />}
         {/* Always rendered and always horizontally centred (absolute, so the
             variable-width left/right groups never shift it). Inactive exactly
             like 開始 while not responding; active + blinking orange (light
@@ -383,17 +392,17 @@ const CommaDebug: React.FC = () => {
             </div>
           ))}
         </div>
-        {/* Debug buttons 普段は非表示 */}
-        {/* <button
-          onClick={() => triggerSummon('A')}
-          disabled={!!summonedRoom}
-          style={{ padding: '6px 10px', marginLeft: 'auto' }}
-        >
-          test : {meetingDisplayName('A')}呼びかけ
-        </button>
-        <button onClick={() => triggerSummon('B')} disabled={!!summonedRoom} style={{ padding: '6px 10px' }}>
-          test : {meetingDisplayName('B')}呼びかけ
-        </button> */}
+        {/* Debug buttons: SHOW_TEST_SUMMON_BUTTONS で表示切替 */}
+        {SHOW_TEST_SUMMON_BUTTONS && (
+          <>
+            <button onClick={() => triggerSummon('A')} disabled={!!summonedRoom} style={{ padding: '6px 10px' }}>
+              test : {meetingDisplayName('A')}呼びかけ
+            </button>
+            <button onClick={() => triggerSummon('B')} disabled={!!summonedRoom} style={{ padding: '6px 10px' }}>
+              test : {meetingDisplayName('B')}呼びかけ
+            </button>
+          </>
+        )}
         {/* <button onClick={() => setDebugOpen((v) => !v)} style={{ padding: '6px 10px' }}>
           {debugOpen ? 'デバッグ情報を閉じる ▲' : 'デバッグ情報 ▼'}
         </button> */}

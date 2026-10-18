@@ -6,6 +6,8 @@ import type { Room } from 'livekit-client';
 import CommaTrackBridge, { type SakuraTrack } from '../components/CommaTrackBridge';
 import LiveSakuraPanel, { type LiveSakuraPanelHandle } from '../components/LiveSakuraPanel';
 import MicIconButton from '../components/MicIconButton';
+import RecordingBadges from '../components/RecordingBadges';
+import { useRecordingControl } from '../hooks/useRecordingControl';
 import { meetingDisplayName } from '../lib/meetingLabels';
 
 type RoomSession = { token: string; url: string; room: string; identity: string; name?: string };
@@ -52,6 +54,7 @@ const ControlDebug: React.FC = () => {
 
   const panelARef = useRef<LiveSakuraPanelHandle | null>(null);
   const panelBRef = useRef<LiveSakuraPanelHandle | null>(null);
+  const { start: startRecording, state: recordingState } = useRecordingControl({ roomA, roomB });
 
   useEffect(() => {
     const raw = sessionStorage.getItem('livekit_session');
@@ -107,6 +110,7 @@ const ControlDebug: React.FC = () => {
             panelARef.current?.play();
             panelBRef.current?.play();
             setStarted(true);
+            startRecording();
           }}
           disabled={started || sakuraTracksA.length === 0 || sakuraTracksB.length === 0}
           className={!started && sakuraTracksA.length > 0 && sakuraTracksB.length > 0 ? 'comma-start-pulse' : undefined}
@@ -114,6 +118,7 @@ const ControlDebug: React.FC = () => {
         >
           開始
         </button>
+        {started && <RecordingBadges state={recordingState} />}
       </div>
 
       {/* Hidden LiveKitRoom connections — only used to obtain the remote camera/mic MediaStreamTrack + Room */}
