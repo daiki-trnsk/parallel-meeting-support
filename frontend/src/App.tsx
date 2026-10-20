@@ -5,6 +5,7 @@ import Meeting from './pages/Meeting';
 import CommaDebug from './pages/CommaDebug';
 import ControlDebug from './pages/ControlDebug';
 import SpikeTest from './pages/SpikeTest';
+import Sakura from './pages/Sakura';
 
 function App(): JSX.Element {
   return (
@@ -15,6 +16,7 @@ function App(): JSX.Element {
         <Route path="/comma-debug" element={<CommaDebug />} />
         <Route path="/control-debug" element={<ControlDebug />} />
         <Route path="/spike-test" element={<SpikeTest />} />
+        <Route path="/sakura" element={<Sakura />} />
       </Routes>
     </BrowserRouter>
   );

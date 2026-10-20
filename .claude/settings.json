@@ -17,7 +17,15 @@
       "Bash(./.venv/Scripts/python.exe -)",
       "Bash(./.venv/Scripts/python.exe -c \"import ast;ast.parse\\(open\\('meeting_recorder.py',encoding='utf-8'\\).read\\(\\)\\);print\\('ok'\\)\")",
       "Bash(powershell -NoProfile -Command \"Get-CimInstance Win32_Process -Filter \\\\\"Name='python.exe'\\\\\" | Select-Object ProcessId,CreationDate,CommandLine | Format-List\")",
-      "Bash(grep -v -E '\\\\.pyc$|node_modules')"
+      "Bash(grep -v -E '\\\\.pyc$|node_modules')",
+      "Bash(node -e \"console.log\\(require\\('livekit-client/package.json'\\).version, require\\('@livekit/components-react/package.json'\\).version\\)\")",
+      "Bash(curl -s -m 60 -X POST https://pms-token-server.onrender.com/token -H 'Content-Type: application/json' -d '{\"identity\":\"participant-a\",\"room\":\"room-a\"}')",
+      "Bash(node -e \"let s='';process.stdin.on\\('data',d=>s+=d\\).on\\('end',\\(\\)=>{const j=JSON.parse\\(s\\);console.log\\(Object.keys\\(j\\), j.url\\);const p=j.token.split\\('.'\\)[1];console.log\\(Buffer.from\\(p,'base64url'\\).toString\\(\\)\\)}\\)\")",
+      "Bash(echo \"tsc exit=$?\")",
+      "Bash(grep -E \"^\\\\s+[0-9]+:[0-9]+|\\\\.tsx?$\")",
+      "Read(//c/Program Files/Google/Chrome/Application/**)",
+      "Read(//c/Users/dahui/AppData/Local/**)",
+      "Bash(node e2e.mjs)"
     ]
   }
 }

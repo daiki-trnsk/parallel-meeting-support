@@ -8,7 +8,12 @@ import LiveSakuraPanel, { type LiveSakuraPanelHandle } from '../components/LiveS
 import MicIconButton from '../components/MicIconButton';
 import RecordingBadges from '../components/RecordingBadges';
 import { useRecordingControl } from '../hooks/useRecordingControl';
+import { useSakuraStart } from '../hooks/useSakuraStart';
 import { meetingDisplayName } from '../lib/meetingLabels';
+
+// 録画動画サクラ（/sakura）4人全員の ready が揃うまで開始ボタンを押せなくするか
+// （生声サクラで実験する場合は false）
+const REQUIRE_RECORDED_SAKURA_READY = true;
 
 type RoomSession = { token: string; url: string; room: string; identity: string; name?: string };
 
@@ -55,6 +60,9 @@ const ControlDebug: React.FC = () => {
   const panelARef = useRef<LiveSakuraPanelHandle | null>(null);
   const panelBRef = useRef<LiveSakuraPanelHandle | null>(null);
   const { start: startRecording, state: recordingState } = useRecordingControl({ roomA, roomB });
+  const { allReady: sakuraAllReady, sendStart: sendSakuraStart } = useSakuraStart({ roomA, roomB });
+  const startable =
+    sakuraTracksA.length > 0 && sakuraTracksB.length > 0 && (!REQUIRE_RECORDED_SAKURA_READY || sakuraAllReady);
 
   useEffect(() => {
     const raw = sessionStorage.getItem('livekit_session');
@@ -109,11 +117,12 @@ const ControlDebug: React.FC = () => {
             // gesture before the live サクラ audio actually starts.
             panelARef.current?.play();
             panelBRef.current?.play();
+            sendSakuraStart();
             setStarted(true);
             startRecording();
           }}
-          disabled={started || sakuraTracksA.length === 0 || sakuraTracksB.length === 0}
-          className={!started && sakuraTracksA.length > 0 && sakuraTracksB.length > 0 ? 'comma-start-pulse' : undefined}
+          disabled={started || !startable}
+          className={!started && startable ? 'comma-start-pulse' : undefined}
           style={{ padding: '6px 10px' }}
         >
           開始

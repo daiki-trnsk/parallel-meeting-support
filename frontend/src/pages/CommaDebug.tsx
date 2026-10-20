@@ -16,6 +16,7 @@ import { useSubtitleSync, type SubtitleEntry } from '../hooks/useSubtitleSync';
 import { useSummonSignal, overlapsLostWindow, type LostWindow } from '../hooks/useSummonSignal';
 import { useCompositeMeetingStream } from '../hooks/useCompositeMeetingStream';
 import { useRecordingControl } from '../hooks/useRecordingControl';
+import { useSakuraStart } from '../hooks/useSakuraStart';
 import type { MeetingId } from '../hooks/useMeetingRecorder';
 import { speakerDisplay } from '../lib/speakerDisplay';
 import { meetingDisplayName } from '../lib/meetingLabels';
@@ -28,6 +29,9 @@ const CATCHUP_START_MARGIN_MS = 1000;
 const READY_WAIT_MS = 15000;
 // テスト用の呼びかけボタンを表示するか（本番実験時は false）
 const SHOW_TEST_SUMMON_BUTTONS = true;
+// 録画動画サクラ（/sakura）4人全員の ready が揃うまで開始ボタンを押せなくするか
+// （生声サクラで実験する場合は false）
+const REQUIRE_RECORDED_SAKURA_READY = true;
 
 const headingStyle: React.CSSProperties = {
   flex: '1 1 0',
@@ -271,6 +275,8 @@ const CommaDebug: React.FC = () => {
     markRealtimeReached,
   } = useSummonSignal({ roomA, roomB, getPlaybackEpochMs, enabled: started });
   const { start: startRecording, state: recordingState } = useRecordingControl({ roomA, roomB });
+  const { allReady: sakuraAllReady, sendStart: sendSakuraStart } = useSakuraStart({ roomA, roomB });
+  const startable = ready && (!REQUIRE_RECORDED_SAKURA_READY || sakuraAllReady);
   const { videoTrack: trackA, audioTrack: audioTrackA } = useCompositeMeetingStream(
     sakuraTracksA,
     'A',
@@ -333,14 +339,15 @@ const CommaDebug: React.FC = () => {
             // so the browser's unmuted-autoplay policy sees a direct user
             // gesture before comma playback (with audio) actually starts.
             controllerRef.current?.unlockPlayback();
+            sendSakuraStart();
             setStarted(true);
             startRecording();
           }}
-          disabled={started || !ready}
-          className={ready && !started ? 'comma-start-pulse' : undefined}
+          disabled={started || !startable}
+          className={startable && !started ? 'comma-start-pulse' : undefined}
           style={{ padding: '6px 10px' }}
         >
-          {ready || started ? '開始' : '準備中…'}
+          {startable || started ? '開始' : '準備中…'}
         </button>
         {/* Experiment audio recording (agent side) acknowledgement per room. */}
         {started && <RecordingBadges state={recordingState} />}
