@@ -30,8 +30,8 @@ const READY_WAIT_MS = 15000;
 // テスト用の呼びかけボタンを表示するか（本番実験時は false）
 const SHOW_TEST_SUMMON_BUTTONS = true;
 // 録画動画サクラ（/sakura）4人全員の ready が揃うまで開始ボタンを押せなくするか
-// （生声サクラで実験する場合は false）
-const REQUIRE_RECORDED_SAKURA_READY = true;
+// （動作確認中は false: 揃っていなくても開始でき、揃い/未揃いの表示だけ出す）
+const REQUIRE_RECORDED_SAKURA_READY = false;
 
 const headingStyle: React.CSSProperties = {
   flex: '1 1 0',
@@ -349,6 +349,12 @@ const CommaDebug: React.FC = () => {
         >
           {startable || started ? '開始' : '準備中…'}
         </button>
+        {/* Before start only: サクラ set ready back to '0' once playing. */}
+        {!started && (
+          <div style={{ color: sakuraAllReady ? '#4caf50' : '#ff9800', fontSize: 13 }}>
+            サクラ：{sakuraAllReady ? '揃っています' : '揃っていません'}
+          </div>
+        )}
         {/* Experiment audio recording (agent side) acknowledgement per room. */}
         {started && <RecordingBadges state={recordingState} />}
         {/* Always rendered and always horizontally centred (absolute, so the
