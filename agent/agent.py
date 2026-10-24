@@ -28,7 +28,15 @@ AGENT_IDENTITY = os.environ.get("PMS_AGENT_IDENTITY", "pms-agent-room-a")
 
 SUMMON_KEYWORDS = [
     kw.strip()
-    for kw in os.environ.get("PMS_SUMMON_KEYWORDS", "田中").split(",")
+    for kw in os.environ.get("PMS_SUMMON_KEYWORDS", "田中,たなか,タナカ,中さん,なかさん").split(",")
+    if kw.strip()
+]
+
+# Deepgram nova-3 の Keyterm Prompting に渡す語。認識段階で「田中」を出やすくする。
+# 誤変換の救済は SUMMON_KEYWORDS 側でやるので、ここには正しい表記だけを入れる。
+DEEPGRAM_KEYTERMS = [
+    kw.strip()
+    for kw in os.environ.get("PMS_DEEPGRAM_KEYTERMS", "田中,田中さん").split(",")
     if kw.strip()
 ]
 
@@ -391,6 +399,7 @@ async def entrypoint(ctx: agents.JobContext):
         # プラグイン既定の 25ms だと日本語の発話が細切れに確定され、
         # 「よろしく」→「しく」のように発話の頭が落ちる。
         endpointing_ms=int(os.environ.get("PMS_DEEPGRAM_ENDPOINTING_MS", "300")),
+        keyterm=DEEPGRAM_KEYTERMS,
     )
 
     # ルームに接続（元の動作を維持）

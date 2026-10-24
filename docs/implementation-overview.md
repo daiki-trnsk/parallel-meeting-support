@@ -174,12 +174,12 @@ LiveKitの `dataReceived` イベントを `topic==='transcript'` でフィルタ
 
 - 1プロセス = 1room想定（`PMS_AGENT_IDENTITY` 環境変数でworker名を指定。例: `pms-agent-room-a`）。
 - ルーム接続後、既存参加者と新規参加者それぞれについて `log_participant()` で identity/name/metadata/参加時刻を標準出力にログ。
-- `DeepgramTranscriptPrinter` クラスが、roomに参加する各リモート参加者の**マイク（音声）トラック**ごとに非同期タスクを起動し、Deepgram STT（`nova-3`, `language="ja"`, `interim_results=False`）にストリーミングして文字起こしする。トラックのsubscribe/unsubscribe・参加者退出に応じてタスクを動的に開始/キャンセルする。
+- `DeepgramTranscriptPrinter` クラスが、roomに参加する各リモート参加者の**マイク（音声）トラック**ごとに非同期タスクを起動し、Deepgram STT（`nova-3`, `language="ja"`, `interim_results=False`, `keyterm=PMS_DEEPGRAM_KEYTERMS`（既定 `"田中,田中さん"`、Keyterm Promptingで呼びかけ語を認識されやすくする））にストリーミングして文字起こしする。トラックのsubscribe/unsubscribe・参加者退出に応じてタスクを動的に開始/キャンセルする。
 - **`AudioClock`**: Deepgramが返す「ストリーム相対秒」を実時刻（epoch ms）に変換するための仕組み。固定アンカー（ストリーム開始時刻＋相対秒）ではなく、音声フレームを投入する度に「これまでに投入した音声の累積長」と「その瞬間の壁時計」を更新し続ける方式。ミュートやパケットロスで音声が途切れても、ズレが蓄積せず再開後に自動補正される（コード中に詳細な設計理由のコメントあり）。
 - **`_speech_epoch_range_ms()`**: Deepgramの `SpeechData` から実際の発話開始/終了をepoch msで算出。`livekit-plugins-deepgram` の既知の不具合（`end_time` が実際には「最初の単語」のendを指してしまう）を踏まえ、`words[-1].end_time` を自前で優先的に使用。タイムスタンプが一切取れない場合はfinal確定時刻を1点区間として代用（`fallback-finalized`）。ストリーム再接続などでクロックが現実離れした値を返した場合は発話長のみを信用して確定時刻から逆算するフォールバック（`clock-resync`、`MAX_SPEECH_LAG_MS=15秒`を閾値）も実装。
 - FINAL_TRANSCRIPTごとに:
   - LiveKitデータチャンネル `topic="transcript"` に `{room, participant, text, timestamp, finalized_at, speech_start_ms, speech_end_ms, speech_time_source}` をJSONでpublish（`reliable=True`）。
-  - テキストが `PMS_SUMMON_KEYWORDS`（既定 `"田中"`、カンマ区切りで複数設定可）のいずれかを含む場合、追加で `topic="summon"` に `{participant, text, timestamp, speech_start_ms, speech_end_ms, speech_time_source}` をpublish。
+  - テキストが `PMS_SUMMON_KEYWORDS`（既定 `"田中,たなか,タナカ,中さん,なかさん"`、カンマ区切りで複数設定可。かな表記や頭の「た」が落ちた誤認識も拾う）のいずれかを含む場合、追加で `topic="summon"` に `{participant, text, timestamp, speech_start_ms, speech_end_ms, speech_time_source}` をpublish。
 - LLMは使用せず、単純な部分文字列マッチで呼びかけ検知している（`docs/configuration.md` の設計方針どおり）。
 
 ### 4.2 `agent_dispatch.py`
