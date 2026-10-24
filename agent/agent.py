@@ -388,6 +388,9 @@ async def entrypoint(ctx: agents.JobContext):
         model="nova-3",
         language="ja",
         interim_results=False,
+        # プラグイン既定の 25ms だと日本語の発話が細切れに確定され、
+        # 「よろしく」→「しく」のように発話の頭が落ちる。
+        endpointing_ms=int(os.environ.get("PMS_DEEPGRAM_ENDPOINTING_MS", "300")),
     )
 
     # ルームに接続（元の動作を維持）
