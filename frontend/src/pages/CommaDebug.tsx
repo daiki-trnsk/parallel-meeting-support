@@ -315,6 +315,25 @@ const CommaDebug: React.FC = () => {
     });
   }, [summonedRoom, roomA, roomB]);
 
+  // Space bar = 応答終了 button, but only while a response is in progress:
+  // the listener is attached for exactly that span, so Space does nothing
+  // otherwise. preventDefault + blur stop Space from also "clicking" whichever
+  // button still has focus (e.g. 戻る would navigate away) — buttons activate
+  // on keyup, after this listener is already gone. Key repeats are ignored so
+  // holding Space can't end a summon that arrives while the key is still down.
+  useEffect(() => {
+    if (summonedRoom === null) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.code !== 'Space') return;
+      e.preventDefault();
+      if (e.repeat) return;
+      (document.activeElement as HTMLElement | null)?.blur();
+      clearSummon();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [summonedRoom, clearSummon]);
+
   if (!sessions) {
     return <div style={{ padding: 24 }}>Loading...</div>;
   }

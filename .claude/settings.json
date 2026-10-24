@@ -27,7 +27,8 @@
       "Read(//c/Users/dahui/AppData/Local/**)",
       "Bash(node e2e.mjs)",
       "Bash(.venv/Scripts/python.exe -c \"import ast;ast.parse\\(open\\('agent.py',encoding='utf-8'\\).read\\(\\)\\);print\\('ok'\\)\")",
-      "PowerShell(python -c \"import livekit.plugins.deepgram.stt as s, importlib.metadata as m; print\\(s.__file__\\); print\\(m.version\\('livekit-plugins-deepgram'\\)\\)\")"
+      "PowerShell(python -c \"import livekit.plugins.deepgram.stt as s, importlib.metadata as m; print\\(s.__file__\\); print\\(m.version\\('livekit-plugins-deepgram'\\)\\)\")",
+      "PowerShell(npx tsc --noEmit -p .)"
     ]
   }
 }
