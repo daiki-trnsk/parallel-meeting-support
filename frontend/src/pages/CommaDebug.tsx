@@ -20,6 +20,7 @@ import { useSakuraStart } from '../hooks/useSakuraStart';
 import type { MeetingId } from '../hooks/useMeetingRecorder';
 import { speakerDisplay } from '../lib/speakerDisplay';
 import { meetingDisplayName } from '../lib/meetingLabels';
+import { playChime, unlockChime } from '../lib/chime';
 
 type RoomSession = { token: string; url: string; room: string; identity: string; name?: string };
 
@@ -301,6 +302,13 @@ const CommaDebug: React.FC = () => {
     });
   }, [summonedRoom]);
 
+  // "ピン!" the instant a response starts — the switch into 応答中 is easy to
+  // miss otherwise. summonedRoom only ever goes null → room (re-entrant
+  // summons are ignored), so a non-null value here is always a fresh start.
+  useEffect(() => {
+    if (summonedRoom !== null) playChime();
+  }, [summonedRoom]);
+
   // Both LiveKitRoom connections are mounted with audio={false} — the local
   // mic is never published by default (the 同時参加者 normally just watches
   // both meetings). While summoned, publish the mic to *only* that room so
@@ -358,6 +366,7 @@ const CommaDebug: React.FC = () => {
             // so the browser's unmuted-autoplay policy sees a direct user
             // gesture before comma playback (with audio) actually starts.
             controllerRef.current?.unlockPlayback();
+            unlockChime();
             sendSakuraStart();
             setStarted(true);
             startRecording();
