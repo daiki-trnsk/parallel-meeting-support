@@ -72,15 +72,11 @@ async function rewind(video: HTMLVideoElement): Promise<void> {
  *
  * 生声サクラ（Meeting.tsx）とは映像・音声の供給元だけが違う。getUserMedia の
  * 代わりに、選択した動画ファイルを再生する <video> から
- * video.captureStream() の映像・音声トラックを取り、同じ identity
- * （participant-a..d）・同じ Room に Camera/Microphone として publish する。
- *
- * 音声も captureStream から取るのは口の動きと音を揃えるため。以前は
- * createMediaElementSource → MediaStreamAudioDestinationNode（Web Audio 経由）
- * で取っていたが、その経路の遅延ぶん音が映像より一定に遅れて届いていた
- * （受信側の WebRTC リップシンクは送信時点のずれまでは直せない）。
- * <video> は muted にしてサクラPC から音を出さない。Chrome の captureStream は
- * 音量・ミュート適用前の音を取るので、ミュートしても publish される音声は無音にならない。
+ *   映像: video.captureStream() の映像トラック
+ *   音声: createMediaElementSource(video) → MediaStreamAudioDestinationNode
+ * を取り、同じ identity（participant-a..d）・同じ Room に Camera/Microphone
+ * として publish する。音声グラフは ctx.destination に繋がないので、
+ * createMediaElementSource で要素の出力が奪われた結果、サクラPC からは音が出ない。
  *
  * publish 完了で attributes.ready='1' を立て、同時参加者の start（Data Channel）
  * で再生を始める。ended で退室 → 0秒に戻して再接続 → ready を立て直し、
@@ -117,6 +113,8 @@ const SakuraPlayer: React.FC<{ id: SakuraId }> = ({ id }) => {
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const objectUrlRef = useRef<string | null>(null);
+  const ctxRef = useRef<AudioContext | null>(null);
+  const destRef = useRef<MediaStreamAudioDestinationNode | null>(null);
   const roomRef = useRef<Room | null>(null);
   // true only between "ready set" and "start received" — start is honoured once.
   const awaitingStartRef = useRef(false);
@@ -157,8 +155,8 @@ const SakuraPlayer: React.FC<{ id: SakuraId }> = ({ id }) => {
 
   const join = useCallback(async () => {
     const video = videoRef.current as CapturableVideo | null;
-    if (!video) throw new Error('動画が未初期化です');
-    video.muted = true; // サクラPCから音を出さない（captureStream の音声には影響しない）
+    const dest = destRef.current;
+    if (!video || !dest) throw new Error('動画または音声グラフが未初期化です');
 
     await leave();
     await rewind(video);
@@ -185,10 +183,9 @@ const SakuraPlayer: React.FC<{ id: SakuraId }> = ({ id }) => {
     await room.connect(url, token, { autoSubscribe: false });
 
     const captured = video.captureStream();
+    captured.getAudioTracks().forEach((t) => t.stop()); // 音声は AudioContext 経由で取る
     const videoTrack = captured.getVideoTracks()[0];
-    const audioTrack = captured.getAudioTracks()[0];
     if (!videoTrack) throw new Error('captureStream() から映像トラックを取得できません');
-    if (!audioTrack) throw new Error('captureStream() から音声トラックを取得できません（動画に音声がありますか）');
 
     // simulcast:false のとき livekit-client は videoEncoding をそのまま
     // sendEncodings に渡すので、360p への縮小は scaleResolutionDownBy で指定する
@@ -203,9 +200,7 @@ const SakuraPlayer: React.FC<{ id: SakuraId }> = ({ id }) => {
         scaleResolutionDownBy,
       } as VideoEncoding,
     });
-    // Camera と Microphone は livekit-client が同じ MediaStream（msid）に入れるので、
-    // 受信側では WebRTC のリップシンクがかかる。
-    await room.localParticipant.publishTrack(audioTrack, {
+    await room.localParticipant.publishTrack(dest.stream.getAudioTracks()[0].clone(), {
       source: Track.Source.Microphone,
     });
     await room.localParticipant.setAttributes({ [SAKURA_READY_ATTR]: '1' });
@@ -215,9 +210,23 @@ const SakuraPlayer: React.FC<{ id: SakuraId }> = ({ id }) => {
   }, [cfg, leave, onStart, fail]);
 
   const onConnect = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (!ctxRef.current) {
+      // createMediaElementSource can only be called once per element, so the
+      // graph is built once and reused for every later connection.
+      const ctx = new AudioContext();
+      const source = ctx.createMediaElementSource(video);
+      const dest = ctx.createMediaStreamDestination();
+      source.connect(dest); // ctx.destination には接続しない（サクラPCから音を出さない）
+      ctxRef.current = ctx;
+      destRef.current = dest;
+    }
+    // resume() is called synchronously inside the click handler (user gesture).
+    const resumed = ctxRef.current.resume();
     setError(null);
     setPhase('connecting');
-    join().catch(fail);
+    resumed.then(join).catch(fail);
   };
 
   const onEnded = () => {
@@ -255,6 +264,7 @@ const SakuraPlayer: React.FC<{ id: SakuraId }> = ({ id }) => {
       const room = roomRef.current;
       roomRef.current = null;
       room?.disconnect();
+      ctxRef.current?.close().catch(() => {});
       if (objectUrlRef.current) URL.revokeObjectURL(objectUrlRef.current);
     };
   }, []);
@@ -289,13 +299,12 @@ const SakuraPlayer: React.FC<{ id: SakuraId }> = ({ id }) => {
         状態：<strong>{PHASE_LABEL[phase]}</strong>
         {error && <span style={{ color: 'crimson', marginLeft: 8 }}>{error}</span>}
       </div>
-      {/* Preview only: always muted so the サクラPC stays silent; the published
-          audio comes from captureStream(), which ignores muted. */}
+      {/* Preview only: its audio is taken over by createMediaElementSource
+          once 接続 is pressed, and never routed to the speakers. */}
       <video
         ref={videoRef}
         preload="auto"
         playsInline
-        muted
         onEnded={onEnded}
         style={{ width: 480, maxWidth: '100%', background: '#000' }}
       />
