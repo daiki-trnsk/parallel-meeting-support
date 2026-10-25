@@ -28,7 +28,9 @@
       "Bash(node e2e.mjs)",
       "Bash(.venv/Scripts/python.exe -c \"import ast;ast.parse\\(open\\('agent.py',encoding='utf-8'\\).read\\(\\)\\);print\\('ok'\\)\")",
       "PowerShell(python -c \"import livekit.plugins.deepgram.stt as s, importlib.metadata as m; print\\(s.__file__\\); print\\(m.version\\('livekit-plugins-deepgram'\\)\\)\")",
-      "PowerShell(npx tsc --noEmit -p .)"
+      "PowerShell(npx tsc --noEmit -p .)",
+      "Bash(python -I \"C:/Users/dahui/AppData/Local/Temp/claude/c--Users-dahui-work-parallel-meeting-support/12a49004-2121-45ac-a480-7f9728567cb6/scratchpad/migrate_recordings.py\" agent/recordings)",
+      "Bash(python -c \"import sys; sys.path.insert\\(0,'agent'\\); from meeting_recorder import _session_dir_name as f; print\\(f\\('20261025-153436','subject'\\), f\\('abc','control'\\)\\)\")"
     ]
   }
 }

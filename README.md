@@ -33,7 +33,7 @@ python agent.py dev
 実験群（CommaDebug, `subject-01`）・統制群（ControlDebug, `subject-control-01`）のどちらでも動く。
 画面上部の `REC A` / `REC B` が赤丸付きなら録音中、赤背景の「未開始」なら agent から応答がない。
 
-- 出力: `agent/recordings/{開始日時}-{subject|control}-roomA.wav` / `-roomB.wav`（16kHz・モノラル・room 内の全参加者をミックス）
+- 出力: `agent/recordings/{YYYY-MM-DD_HH-MM-SS}_{subject|control}/roomA.wav` / `roomB.wav`（1 セッション 1 ディレクトリ。16kHz・モノラル・room 内の全参加者をミックス）
 - 同名の `.json` に開始 epoch（WAV の 0 秒）・終了理由・入退室/ミュートの時刻を記録
 - ミュート等で音声が来ない区間は無音で埋めるため、WAV の t 秒 = `start_epoch_ms` + t 秒
 - 同じ回で再度開始された場合は `-part2` 以降の別ファイルになる（上書きしない）

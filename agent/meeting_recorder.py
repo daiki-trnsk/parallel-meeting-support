@@ -12,8 +12,9 @@
 開始: 同時参加者が「開始」を押すと、フロントが topic="record-control" で
 {action:"start", session_id} を送ってくる（受信確認のため数秒おきに再送される）。
 同時参加者は実験群（subject-01, CommaDebug）と統制群（subject-control-01,
-ControlDebug）の 2 種類で、送信者の identity から群名を決めてファイル名に入れる
-（例: 20261013-153012-control-roomA.wav）。
+ControlDebug）の 2 種類で、送信者の identity から群名を決めてディレクトリ名に入れる
+（例: recordings/2026-10-13_15-30-12_control/roomA.wav。1 セッション = 1 ディレクトリで、
+roomA / roomB の .wav と .json の 4 ファイルが入る）。
 終了: 録音を開始した同時参加者がその room から退出したとき。agent 終了時も閉じる。
 
 ミュート対策: WAV は壁時計基準で書く。どのトラックからもフレームが来ない
@@ -75,6 +76,13 @@ def _room_label(room_name: str) -> str:
 def _safe_session_id(raw: Any) -> str:
     text = re.sub(r"[^0-9A-Za-z_-]", "", str(raw or ""))[:64]
     return text or datetime.now().strftime("%Y%m%d-%H%M%S")
+
+
+def _session_dir_name(session_id: str, group: str) -> str:
+    """'20261025-153436' + 'subject' → '2026-10-25_15-34-36_subject'"""
+    m = re.fullmatch(r"(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})", session_id)
+    stamp = "{}-{}-{}_{}-{}-{}".format(*m.groups()) if m else session_id
+    return f"{stamp}_{group}"
 
 
 def _parse_subject_groups(raw: str) -> dict[str, str]:
@@ -330,13 +338,14 @@ class MeetingAudioRecorder:
     # ---- 開始・終了 ----
 
     def _begin(self, session_id: str, subject: str, sent_at: Any) -> None:
-        os.makedirs(self._out_dir, exist_ok=True)
         group = self._subject_groups[subject]
-        base = f"{session_id}-{group}-{self._label}"
+        session_dir = os.path.join(self._out_dir, _session_dir_name(session_id, group))
+        os.makedirs(session_dir, exist_ok=True)
+        base = self._label
         part = 1
         while True:
             name = base if part == 1 else f"{base}-part{part}"
-            wav_path = os.path.join(self._out_dir, name + ".wav")
+            wav_path = os.path.join(session_dir, name + ".wav")
             if not os.path.exists(wav_path):
                 break
             part += 1
@@ -354,7 +363,7 @@ class MeetingAudioRecorder:
             "subject_identity": subject,
             "start_requested_at_ms": sent_at if isinstance(sent_at, (int, float)) else None,
         }
-        writer = _RecordingWriter(wav_path, os.path.join(self._out_dir, name + ".json"), meta)
+        writer = _RecordingWriter(wav_path, os.path.join(session_dir, name + ".json"), meta)
         writer.start()
         self._writer = writer
         self._session_id = session_id

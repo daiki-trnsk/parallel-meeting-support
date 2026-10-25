@@ -4,7 +4,7 @@
 // exponential decay.
 
 const FREQ_HZ = 1568; // G6 — bright, cuts through meeting audio
-const PEAK_GAIN = 0.35;
+const PEAK_GAIN = 0.9; // just under 1.0 (clipping)
 const ATTACK_S = 0.005;
 const DECAY_S = 0.35;
 
