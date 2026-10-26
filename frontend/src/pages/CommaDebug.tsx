@@ -29,7 +29,7 @@ const AT_BOTTOM_THRESHOLD = 30;
 const CATCHUP_START_MARGIN_MS = 1000;
 const READY_WAIT_MS = 15000;
 // テスト用の呼びかけボタンを表示するか（本番実験時は false）
-const SHOW_TEST_SUMMON_BUTTONS = true;
+const SHOW_TEST_SUMMON_BUTTONS = false;
 // 録画動画サクラ（/sakura）4人全員の ready が揃うまで開始ボタンを押せなくするか
 // （動作確認中は false: 揃っていなくても開始でき、揃い/未揃いの表示だけ出す）
 const REQUIRE_RECORDED_SAKURA_READY = false;
